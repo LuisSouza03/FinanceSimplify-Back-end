@@ -1,4 +1,4 @@
-﻿using FinanceSimplify.Models;
+﻿using FinanceSimplify.Models.User;
 
 namespace FinanceSimplify.Services.PasswordService {
     public interface IPasswordInterface {

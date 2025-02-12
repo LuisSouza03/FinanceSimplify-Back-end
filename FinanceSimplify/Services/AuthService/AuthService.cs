@@ -1,6 +1,6 @@
 ﻿using FinanceSimplify.Data;
-using FinanceSimplify.Dtos;
-using FinanceSimplify.Models;
+using FinanceSimplify.Dtos.User;
+using FinanceSimplify.Models.User;
 using FinanceSimplify.Services.PasswordService;
 using Microsoft.EntityFrameworkCore;
 
@@ -15,9 +15,9 @@ namespace FinanceSimplify.Services.AuthService {
         }
         
 
-        public async Task<ResponseModel<UserCreateDto>> Registrar(UserCreateDto userRegister) {
+        public async Task<UserResponseModel<UserCreateDto>> Registrar(UserCreateDto userRegister) {
 
-            ResponseModel<UserCreateDto> response = new ResponseModel<UserCreateDto>();
+            UserResponseModel<UserCreateDto> response = new UserResponseModel<UserCreateDto>();
 
             try {
 
@@ -54,9 +54,9 @@ namespace FinanceSimplify.Services.AuthService {
 
         }
 
-        public async Task<ResponseModel<string>> Login(UserLoginDto userLogin) {
+        public async Task<UserResponseModel<string>> Login(UserLoginDto userLogin) {
 
-            ResponseModel<string> response = new ResponseModel<string>();
+            UserResponseModel<string> response = new UserResponseModel<string>();
 
             try {
 

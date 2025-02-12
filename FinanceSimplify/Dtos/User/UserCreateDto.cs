@@ -1,6 +1,6 @@
 ﻿using System.ComponentModel.DataAnnotations;
 
-namespace FinanceSimplify.Dtos {
+namespace FinanceSimplify.Dtos.User {
     public class UserCreateDto {
 
         [Required(ErrorMessage = "O campo usuário é obrigatório")]

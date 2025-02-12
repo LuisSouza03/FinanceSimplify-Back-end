@@ -1,4 +1,4 @@
-﻿using FinanceSimplify.Dtos;
+﻿using FinanceSimplify.Dtos.User;
 using FinanceSimplify.Services.AuthService;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;

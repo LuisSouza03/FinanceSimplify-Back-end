@@ -1,9 +1,9 @@
 ﻿using System.ComponentModel.DataAnnotations;
 
-namespace FinanceSimplify.Models {
+namespace FinanceSimplify.Models.User {
     public class UsuarioModel {
 
-       public int Id { get; set; }
+        public int Id { get; set; }
         public string Email { get; set; }
         public string Name { get; set; }
         public byte[] PasswordHash { get; set; }

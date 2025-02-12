@@ -3,7 +3,7 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using FinanceSimplify.Dtos;
-using FinanceSimplify.Models;
+using FinanceSimplify.Models.User;
 using Microsoft.IdentityModel.Tokens;
 
 namespace FinanceSimplify.Services.PasswordService {

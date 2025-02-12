@@ -1,4 +1,5 @@
-﻿using FinanceSimplify.Models;
+﻿using FinanceSimplify.Models.Transaction;
+using FinanceSimplify.Models.User;
 using Microsoft.EntityFrameworkCore;
 
 namespace FinanceSimplify.Data {
@@ -9,6 +10,8 @@ namespace FinanceSimplify.Data {
         }
 
         public DbSet<UsuarioModel> Usuario { get; set; }
+
+        public DbSet<TransactionModel> Transaction { get; set; }
 
     }
 

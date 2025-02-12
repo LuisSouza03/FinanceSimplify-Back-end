@@ -1,11 +1,11 @@
-﻿using FinanceSimplify.Dtos;
-using FinanceSimplify.Models;
+﻿using FinanceSimplify.Dtos.User;
+using FinanceSimplify.Models.User;
 
 namespace FinanceSimplify.Services.AuthService {
     public interface IAuthInterface {
 
-        Task<ResponseModel<UserCreateDto>> Registrar(UserCreateDto userRegister);
-        Task<ResponseModel<string>> Login(UserLoginDto userLogin);
+        Task<UserResponseModel<UserCreateDto>> Registrar(UserCreateDto userRegister);
+        Task<UserResponseModel<string>> Login(UserLoginDto userLogin);
 
     }
 }

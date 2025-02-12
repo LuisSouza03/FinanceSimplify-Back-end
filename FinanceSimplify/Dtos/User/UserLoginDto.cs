@@ -1,6 +1,6 @@
 ﻿using System.ComponentModel.DataAnnotations;
 
-namespace FinanceSimplify.Dtos {
+namespace FinanceSimplify.Dtos.User {
     public class UserLoginDto {
 
         [Required(ErrorMessage = "O campo email é obrigatório"), EmailAddress(ErrorMessage = "Email inválido!")]
