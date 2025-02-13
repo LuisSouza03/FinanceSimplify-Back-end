@@ -4,6 +4,7 @@ using FinanceSimplify.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace FinanceSimplify.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250213173334_addCardAndCategory")]
+    partial class addCardAndCategory
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -34,12 +37,13 @@ namespace FinanceSimplify.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<int>("Type")
-                        .HasColumnType("int");
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
 
-                    b.ToTable("Card");
+                    b.ToTable("CardModel");
                 });
 
             modelBuilder.Entity("FinanceSimplify.Models.Category.CategoryModel", b =>
@@ -56,7 +60,7 @@ namespace FinanceSimplify.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Categories");
+                    b.ToTable("CategoryModel");
                 });
 
             modelBuilder.Entity("FinanceSimplify.Models.Transaction.TransactionModel", b =>
@@ -136,7 +140,7 @@ namespace FinanceSimplify.Migrations
             modelBuilder.Entity("FinanceSimplify.Models.Transaction.TransactionModel", b =>
                 {
                     b.HasOne("FinanceSimplify.Models.Card.CardModel", "Card")
-                        .WithMany("Transactions")
+                        .WithMany("Transaction")
                         .HasForeignKey("CardId");
 
                     b.HasOne("FinanceSimplify.Models.Category.CategoryModel", "Category")
@@ -150,7 +154,7 @@ namespace FinanceSimplify.Migrations
 
             modelBuilder.Entity("FinanceSimplify.Models.Card.CardModel", b =>
                 {
-                    b.Navigation("Transactions");
+                    b.Navigation("Transaction");
                 });
 
             modelBuilder.Entity("FinanceSimplify.Models.Category.CategoryModel", b =>

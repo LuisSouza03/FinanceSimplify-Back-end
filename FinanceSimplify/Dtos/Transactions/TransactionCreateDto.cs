@@ -19,6 +19,8 @@ namespace FinanceSimplify.Dtos.Transactions {
         public TypePaymentMethodEnum? PaymentMethod { get; set; }
         public int? Installments {  get; set; }
         public int? CardId { get; set; }
+
+        [Required(ErrorMessage = "O campo CategoryId é obrigatório")]
         public int? CategoryId { get; set; }
 
 

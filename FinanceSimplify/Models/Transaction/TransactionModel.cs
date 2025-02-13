@@ -1,5 +1,7 @@
 ﻿using System.ComponentModel.DataAnnotations.Schema;
 using FinanceSimplify.Enum;
+using FinanceSimplify.Models.Card;
+using FinanceSimplify.Models.Category;
 
 namespace FinanceSimplify.Models.Transaction {
     public class TransactionModel {
@@ -13,11 +15,11 @@ namespace FinanceSimplify.Models.Transaction {
         public int? Installments { get; set; } // parcelas
 
         public int? CardId { get; set; }
-        //[ForeignKey("CardId")]
-        //public CardModel? Card { get; set; }
+        [ForeignKey("CardId")]
+        public CardModel? Card { get; set; }
 
         public int? CategoryId { get; set; }
-        //[ForeignKey("CategoryId")]
-        //public CategoryModel Category { get; set; }
+        [ForeignKey("CategoryId")]
+        public CategoryModel Category { get; set; }
     }
 }
