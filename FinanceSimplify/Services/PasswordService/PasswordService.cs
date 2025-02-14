@@ -37,7 +37,8 @@ namespace FinanceSimplify.Services.PasswordService {
 
             List<Claim> claims = [
                 new("Email", user.Email),
-                new("Name", user.Name)
+                new("Name", user.Name),
+                new("Id", user.Id.ToString())
             ];
 
             var key = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(_config.GetSection("AppSettings:Token").Value!));

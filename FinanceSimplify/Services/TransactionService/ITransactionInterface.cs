@@ -8,12 +8,14 @@ namespace FinanceSimplify.Services.TransactionService {
 
         Task<TransactionResponseModel<List<TransactionResponseDto>>> GetAllTransactions();
 
-        Task<List<TransactionModel>> GetTransactionsByCard(int cardId, int page, int pageSize);
+        Task<List<TransactionModel>> GetTransactionsByCard(Guid cardId, int page, int pageSize);
 
-        Task<TransactionResponseModel<TransactionResponseDto>> GetTransactionById(int id);
+        Task<TransactionResponseModel<TransactionResponseDto>> GetTransactionById(Guid id);
 
-        Task<TransactionResponseModel<bool>> DeleteTransaction(int id);
+        Task<TransactionResponseModel<bool>> DeleteTransaction(Guid id);
 
-        Task<TransactionResponseModel<TransactionResponseDto>> EditTransaction(int transactionId, TransactionEditDto transactionEditDto);
+        Task<TransactionResponseModel<TransactionResponseDto>> EditTransaction(Guid transactionId, TransactionEditDto transactionEditDto);
+
+        Task<List<TransactionModel>> GetTransactionsByUserId(Guid userId, int page, int pageSize);
     }
 }

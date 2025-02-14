@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace FinanceSimplify.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20250212201407_iniciandoBanco")]
-    partial class iniciandoBanco
+    [Migration("20250213233834_changeIdsToGuid")]
+    partial class changeIdsToGuid
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -25,22 +25,53 @@ namespace FinanceSimplify.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
-            modelBuilder.Entity("FinanceSimplify.Models.Transaction.TransactionModel", b =>
+            modelBuilder.Entity("FinanceSimplify.Models.Card.CardModel", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Type")
                         .HasColumnType("int");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+                    b.HasKey("Id");
+
+                    b.ToTable("Card");
+                });
+
+            modelBuilder.Entity("FinanceSimplify.Models.Category.CategoryModel", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Categories");
+                });
+
+            modelBuilder.Entity("FinanceSimplify.Models.Transaction.TransactionModel", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<decimal>("Amount")
                         .HasColumnType("decimal(18,2)");
 
-                    b.Property<int?>("CardId")
-                        .HasColumnType("int");
+                    b.Property<Guid?>("CardId")
+                        .HasColumnType("uniqueidentifier");
 
-                    b.Property<int>("CategoryId")
-                        .HasColumnType("int");
+                    b.Property<Guid?>("CategoryId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTime>("Date")
                         .HasColumnType("datetime2");
@@ -60,16 +91,18 @@ namespace FinanceSimplify.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CardId");
+
+                    b.HasIndex("CategoryId");
+
                     b.ToTable("Transaction");
                 });
 
             modelBuilder.Entity("FinanceSimplify.Models.User.UsuarioModel", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("Email")
                         .IsRequired()
@@ -93,6 +126,26 @@ namespace FinanceSimplify.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Usuario");
+                });
+
+            modelBuilder.Entity("FinanceSimplify.Models.Transaction.TransactionModel", b =>
+                {
+                    b.HasOne("FinanceSimplify.Models.Card.CardModel", "Card")
+                        .WithMany()
+                        .HasForeignKey("CardId");
+
+                    b.HasOne("FinanceSimplify.Models.Category.CategoryModel", "Category")
+                        .WithMany("Transactions")
+                        .HasForeignKey("CategoryId");
+
+                    b.Navigation("Card");
+
+                    b.Navigation("Category");
+                });
+
+            modelBuilder.Entity("FinanceSimplify.Models.Category.CategoryModel", b =>
+                {
+                    b.Navigation("Transactions");
                 });
 #pragma warning restore 612, 618
         }

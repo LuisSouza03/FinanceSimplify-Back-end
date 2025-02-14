@@ -16,12 +16,15 @@ namespace FinanceSimplify.Dtos.Transactions {
         [Required(ErrorMessage = "O campo Type é obrigatório")]
         public TypeTransactionEnum Type {  get; set; }
 
+        [Required(ErrorMessage = "O campo UserId é obrigatório")]
+        public Guid UserId { get; set; }
+
         public TypePaymentMethodEnum? PaymentMethod { get; set; }
         public int? Installments {  get; set; }
-        public int? CardId { get; set; }
+        public Guid? CardId { get; set; }
 
         [Required(ErrorMessage = "O campo CategoryId é obrigatório")]
-        public int? CategoryId { get; set; }
+        public Guid? CategoryId { get; set; }
 
 
 

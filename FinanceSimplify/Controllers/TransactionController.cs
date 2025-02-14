@@ -30,29 +30,37 @@ namespace FinanceSimplify.Controllers {
 
         [Authorize]
         [HttpGet("byCard/{cardId}")]
-        public async Task<ActionResult> GetTransactionByCard(int cardId, int page = 1, int pageSize = 10) {
+        public async Task<ActionResult> GetTransactionByCard(Guid cardId, int page = 1, int pageSize = 10) {
 
             var response = await _transactionInterface.GetTransactionsByCard(cardId, page, pageSize);
             return Ok(response);
         }
 
         [Authorize]
+        [HttpGet("byUser/{userId}")]
+        public async Task<ActionResult> GetTransactionsByUserId(Guid userId, int page = 1, int pageSize = 10) {
+
+            var response = await _transactionInterface.GetTransactionsByUserId(userId, page, pageSize);
+            return Ok(response);
+        }
+
+        [Authorize]
         [HttpGet("byId/{transactionId}")]
-        public async Task<ActionResult> GetTransactionById(int transactionId) {
+        public async Task<ActionResult> GetTransactionById(Guid transactionId) {
             var response = await _transactionInterface.GetTransactionById(transactionId);
             return Ok(response);
         }
 
         [Authorize]
         [HttpDelete("deleteTransacion/{transactionId}")]
-        public async Task<ActionResult> DeleteTransaction(int transactionId) {
+        public async Task<ActionResult> DeleteTransaction(Guid transactionId) {
             var repsonse = await _transactionInterface.DeleteTransaction(transactionId);
             return Ok(repsonse);
         }
 
         [Authorize]
         [HttpPut("editarAutor/{transactionId}")]
-        public async Task<ActionResult> EditTransaction(int transactionId, [FromBody] TransactionEditDto transactionEditDto) {
+        public async Task<ActionResult> EditTransaction(Guid transactionId, [FromBody] TransactionEditDto transactionEditDto) {
             var response = await _transactionInterface.EditTransaction(transactionId, transactionEditDto);
             return Ok(response);
         }

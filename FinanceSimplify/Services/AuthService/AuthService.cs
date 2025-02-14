@@ -32,6 +32,7 @@ namespace FinanceSimplify.Services.AuthService {
                 _passwordInterface.CreateHashPassword(userRegister.Password, out byte[] passwordHash, out byte[] passwordSalt);
 
                 UsuarioModel user = new() {
+                    Id = Guid.NewGuid(),
                     Email = userRegister.Email,
                     Name = userRegister.Name,
                     PasswordHash = passwordHash,

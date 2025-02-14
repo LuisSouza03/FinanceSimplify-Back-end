@@ -6,7 +6,7 @@ namespace FinanceSimplify.Dtos.Transactions {
     public class TransactionResponseDto {
 
         [Required(ErrorMessage = "O campo Id é obrigatório")]
-        public int Id { get; set; }
+        public Guid Id { get; set; }
 
         [Required(ErrorMessage = "O campo Name é obrigatório")]
         public string Name { get; set; }
@@ -20,10 +20,13 @@ namespace FinanceSimplify.Dtos.Transactions {
         [Required(ErrorMessage = "O campo Type é obrigatório")]
         public TypeTransactionEnum Type { get; set; }
 
+        [Required(ErrorMessage = "O campo UserId é obrigatório")]
+        public Guid UserId { get; set; }
+
         public TypePaymentMethodEnum? PaymentMethod { get; set; }
         public int? Installments { get; set; }
-        public int? CardId { get; set; }
-        public int? CategoryId { get; set; }
+        public Guid? CardId { get; set; }
+        public Guid? CategoryId { get; set; }
 
     }
 }

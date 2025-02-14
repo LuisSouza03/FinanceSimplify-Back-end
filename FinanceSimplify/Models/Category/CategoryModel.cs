@@ -1,9 +1,11 @@
-﻿using FinanceSimplify.Models.Transaction;
+﻿using System.ComponentModel.DataAnnotations;
+using FinanceSimplify.Models.Transaction;
 
 namespace FinanceSimplify.Models.Category {
     public class CategoryModel {
 
-        public int Id { get; set; }
+        [Key]
+        public Guid Id { get; set; } = Guid.NewGuid();
 
         public string Name { get; set; }
 

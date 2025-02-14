@@ -11,11 +11,12 @@ namespace FinanceSimplify.Services.CardService {
             _context = context;
         }
 
-        public async Task<CardCreateResponseModel<CardModel>> CreateCard(CardDto cardDto) {
-            CardCreateResponseModel<CardModel> response = new();
+        public async Task<CardCreateResponseModel<CardDto>> CreateCard(CardDto cardDto) {
+            CardCreateResponseModel<CardDto> response = new();
 
             try {
                 CardModel card = new() {
+                    Id = Guid.NewGuid(),
                     Name = cardDto.Name,
                     Type = cardDto.Type,
                 };
@@ -23,7 +24,7 @@ namespace FinanceSimplify.Services.CardService {
                 _context.Card.Add(card);
                 await _context.SaveChangesAsync();
 
-                response.CardData = new CardModel {
+                response.CardData = new CardDto {
                     Id = card.Id,
                     Name = cardDto.Name,
                     Type = cardDto.Type
@@ -38,6 +39,8 @@ namespace FinanceSimplify.Services.CardService {
                 return response;
             }
         }
+
+        //public async Task<CardCreateResponseModel<CardDto>> GetCardById() { }
 
         public async Task<List<CardModel>> GetAllCards() {
             return await _context.Card.ToListAsync();
