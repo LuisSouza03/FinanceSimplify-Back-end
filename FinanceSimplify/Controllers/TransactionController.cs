@@ -1,4 +1,5 @@
 ﻿using FinanceSimplify.Dtos.Transactions;
+using FinanceSimplify.Enum;
 using FinanceSimplify.Services.TransactionService;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -15,9 +16,9 @@ namespace FinanceSimplify.Controllers {
         }
 
         [Authorize]
-        [HttpPost("Create")]
-        public async Task<ActionResult> CreateTransaction (TransactionCreateDto trnsaction) {
-            var response = await _transactionInterface.CreateTransaction(trnsaction);
+        [HttpPost("Create/{userId}")]
+        public async Task<ActionResult> CreateTransaction (Guid userId, TransactionCreateDto trnsaction) {
+            var response = await _transactionInterface.CreateTransaction(userId, trnsaction);
             return Ok(response);
         }
 
@@ -49,6 +50,20 @@ namespace FinanceSimplify.Controllers {
         public async Task<ActionResult> GetTransactionById(Guid transactionId) {
             var response = await _transactionInterface.GetTransactionById(transactionId);
             return Ok(response);
+        }
+
+        [Authorize]
+        [HttpGet("byDateRange/{userId}")]
+        public async Task<ActionResult> GetTransactionsByDateRange(Guid userId, DateTime startDate, DateTime endDate) {
+            var transactions = await _transactionInterface.GetTransactionByDateRange(userId, startDate, endDate);
+            return Ok(transactions);
+        }
+
+        [Authorize]
+        [HttpGet("byType/{userId}/type/{type}")]
+        public async Task<ActionResult> GetTransactionsByType(Guid userId, TypeTransactionEnum type) {
+            var transactions = await _transactionInterface.GetTransactionByType(userId, type);
+            return Ok(transactions);
         }
 
         [Authorize]

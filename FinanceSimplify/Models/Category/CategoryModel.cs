@@ -9,7 +9,7 @@ namespace FinanceSimplify.Models.Category {
 
         public string Name { get; set; }
 
-        public List<TransactionModel> Transactions { get; set; } = new();
+        public Guid UserId { get; set; }
 
     }
 }

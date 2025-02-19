@@ -4,8 +4,14 @@ using FinanceSimplify.Models.Card;
 namespace FinanceSimplify.Services.CardService {
     public interface ICardInterface {
 
-        Task<CardCreateResponseModel<CardDto>> CreateCard(CardDto cardDto);
+        Task<CardResponseModel<CardResponseDto>> CreateCard(Guid userId, CardDto cardDto);
+
+        Task<CardResponseModel<CardResponseDto>> GetCardById(Guid cardId);
+
+        Task<List<CardModel>> GetCardByUserId(Guid userId, int page, int pageSize);
 
         Task<List<CardModel>> GetAllCards();
+
+        Task<CardResponseModel<bool>> DeleteCard(Guid userId, Guid cardId);
     }
 }

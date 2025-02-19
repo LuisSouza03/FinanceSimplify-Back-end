@@ -2,6 +2,7 @@ using System.Text;
 using FinanceSimplify.Data;
 using FinanceSimplify.Services.AuthService;
 using FinanceSimplify.Services.CardService;
+using FinanceSimplify.Services.Category;
 using FinanceSimplify.Services.PasswordService;
 using FinanceSimplify.Services.TransactionService;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -23,6 +24,7 @@ builder.Services.AddScoped<IAuthInterface, AuthService>();
 builder.Services.AddScoped<IPasswordInterface, PasswordService>();
 builder.Services.AddScoped<ITransactionInterface, TransactionService>();
 builder.Services.AddScoped<ICardInterface, CardService>();
+builder.Services.AddScoped<ICategoryInterface, CategoryService>();
 
 builder.Services.AddDbContext<AppDbContext>(options => {
 

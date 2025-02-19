@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using FinanceSimplify.Data;
 using FinanceSimplify.Dtos.Transactions;
+using FinanceSimplify.Enum;
 using FinanceSimplify.Models.Transaction;
 using FinanceSimplify.Models.User;
 using Microsoft.EntityFrameworkCore;
@@ -13,9 +14,38 @@ namespace FinanceSimplify.Services.TransactionService {
             _context = context;
         }
 
-        public async Task<TransactionResponseModel<TransactionResponseDto>> CreateTransaction(TransactionCreateDto transactionDto) {
+        public async Task<TransactionResponseModel<TransactionResponseDto>> CreateTransaction(Guid userId, TransactionCreateDto transactionDto) {
 
             TransactionResponseModel<TransactionResponseDto> response = new();
+
+            if (transactionDto.PaymentMethod == Enum.TypePaymentMethodEnum.Credito) {
+                if ((transactionDto.Installments is null || transactionDto.Installments == 0) || transactionDto.CardId is null) {
+
+                    response.Status = false;
+                    response.Message = "Para pagamentos com crédito, é necessário informar o número de parcelas e um cartão.";
+                    return response;
+                }
+            }
+            else if (transactionDto.PaymentMethod == Enum.TypePaymentMethodEnum.Debito) { 
+
+                if(transactionDto.CardId is null) {
+                    response.Status = false;
+                    response.Message = "Para pagamentos com débito, é necessário informar um cartão";
+                    return response;
+                }
+            }
+
+            if (transactionDto.Amount <= 0) {
+                response.Status = false;
+                response.Message = "O valor deve ser maior que zero.";
+                return response;
+            }
+
+            if(transactionDto.CategoryId is null) {
+                response.Status = false;
+                response.Message = "Deve inserir uma categoria";
+                return response;
+            }
 
             try {
                 TransactionModel transaction = new() {
@@ -28,10 +58,8 @@ namespace FinanceSimplify.Services.TransactionService {
                     Installments = transactionDto.Installments,
                     CardId = transactionDto.CardId,
                     CategoryId = transactionDto.CategoryId,
-                    UserId = transactionDto.UserId
+                    UserId = userId
                 };
-
-
 
                 _context.Transaction.Add(transaction);
                 await _context.SaveChangesAsync();
@@ -45,8 +73,7 @@ namespace FinanceSimplify.Services.TransactionService {
                     PaymentMethod = transactionDto.PaymentMethod,
                     Installments = transactionDto.Installments,
                     CardId = transactionDto.CardId,
-                    CategoryId = transactionDto.CategoryId,
-                    UserId = transactionDto.UserId
+                    CategoryId = transactionDto.CategoryId
                 };
 
                 response.Message = "Transação criada com sucesso!";
@@ -74,8 +101,7 @@ namespace FinanceSimplify.Services.TransactionService {
                     PaymentMethod = transactionDB.PaymentMethod,
                     Installments = transactionDB.Installments,
                     CardId = transactionDB.CardId,
-                    CategoryId = transactionDB.CategoryId,
-                    UserId = transactionDB.UserId
+                    CategoryId = transactionDB.CategoryId
                 }).ToList();
 
                 response.TransactionData = data;
@@ -123,8 +149,7 @@ namespace FinanceSimplify.Services.TransactionService {
                     PaymentMethod = transaction.PaymentMethod,
                     Installments = transaction.Installments,
                     CardId = transaction.CardId,
-                    CategoryId = transaction.CategoryId,
-                    UserId = transaction.UserId
+                    CategoryId = transaction.CategoryId
                 };
 
                 return response;
@@ -135,6 +160,29 @@ namespace FinanceSimplify.Services.TransactionService {
                 response.Status = false;
                 return response;
             }
+        }
+
+        public async Task<List<TransactionModel>> GetTransactionsByUserId(Guid userId, int page, int pageSize) {
+
+            return await _context.Transaction
+                .Where(t => t.UserId == userId)
+                .OrderByDescending(t => t.Date)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+        }
+
+        public async Task<List<TransactionModel>> GetTransactionByDateRange(Guid userId, DateTime startDate, DateTime endDate) {
+            
+            return await _context.Transaction
+                .Where(t => t.UserId == userId && t.Date >= startDate && t.Date <= endDate)
+                .ToListAsync ();
+        }
+
+        public async Task<List<TransactionModel>> GetTransactionByType(Guid userId, TypeTransactionEnum type) {
+            return await _context.Transaction
+                .Where(t => t.UserId == userId && t.Type == type)
+                .ToListAsync();
         }
 
         public async Task<TransactionResponseModel<bool>> DeleteTransaction(Guid transactionId) {
@@ -211,14 +259,6 @@ namespace FinanceSimplify.Services.TransactionService {
              
         }
 
-        public async Task<List<TransactionModel>> GetTransactionsByUserId(Guid userId, int page, int pageSize) {
-
-            return await _context.Transaction
-                .Where(t => t.UserId == userId)
-                .OrderByDescending(t => t.Date)
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .ToListAsync();
-        }
+        
     }
 }

@@ -15,9 +15,9 @@ namespace FinanceSimplify.Controllers {
         }
 
         [Authorize]
-        [HttpPost("create")]
-        public async Task<ActionResult> CreateCard(CardDto cardDto) {
-            var response = await _cardService.CreateCard(cardDto);
+        [HttpPost("create/{userId}")]
+        public async Task<ActionResult> CreateCard(Guid userId, CardDto cardDto) {
+            var response = await _cardService.CreateCard(userId, cardDto);
             return Ok(response);
         }
 
@@ -26,6 +26,27 @@ namespace FinanceSimplify.Controllers {
         public async Task<ActionResult> GetAllCards() {
             var cards = await _cardService.GetAllCards();
             return Ok(cards);
+        }
+
+        [Authorize]
+        [HttpGet("byUser/{userId}")]
+        public async Task<ActionResult> GetCardByUserId(Guid userId, int page = 1, int pageSize = 10) {
+            var response = await _cardService.GetCardByUserId(userId, page, pageSize);
+            return Ok(response);
+        }
+
+        [Authorize]
+        [HttpGet("byId/{cardId}")]
+        public async Task<ActionResult> GetCardById(Guid cardId) {
+            var card = await _cardService.GetCardById(cardId);
+            return Ok(card);
+        }
+
+        [Authorize]
+        [HttpDelete("delete/{userId}/{cardId}")]
+        public async Task<ActionResult> DeleteCard(Guid userId, Guid cardId) {
+            var card = await _cardService.DeleteCard(userId, cardId);
+            return Ok(card);
         }
     }
 }

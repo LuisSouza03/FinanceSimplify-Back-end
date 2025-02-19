@@ -2,12 +2,13 @@
 using FinanceSimplify.Enum;
 
 namespace FinanceSimplify.Dtos.Card {
-    public class CardDto {
+    public class CardResponseDto {
 
-        [Required(ErrorMessage = "O campo Name é obrigatório")]
+        [Key]
+        public Guid Id { get; set; }
+
         public required string Name { get; set; }
 
-        [Required(ErrorMessage = "O campo Type é obrigatório")]
         public TypeCardTransactionEnum Type { get; set; }
     }
 }
