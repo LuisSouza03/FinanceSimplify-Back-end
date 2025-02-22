@@ -1,6 +1,7 @@
 using System.Text;
 using FinanceSimplify.Data;
 using FinanceSimplify.Services.AuthService;
+using FinanceSimplify.Services.BankAccountService;
 using FinanceSimplify.Services.CardService;
 using FinanceSimplify.Services.Category;
 using FinanceSimplify.Services.PasswordService;
@@ -25,6 +26,7 @@ builder.Services.AddScoped<IPasswordInterface, PasswordService>();
 builder.Services.AddScoped<ITransactionInterface, TransactionService>();
 builder.Services.AddScoped<ICardInterface, CardService>();
 builder.Services.AddScoped<ICategoryInterface, CategoryService>();
+builder.Services.AddScoped<IBankAccountInterface, BankAccountService>();
 
 builder.Services.AddDbContext<AppDbContext>(options => {
 
@@ -72,6 +74,7 @@ app.UseHttpsRedirection();
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseCors(x => x.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
 
 app.MapControllers();
 

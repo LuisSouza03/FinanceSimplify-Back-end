@@ -11,5 +11,7 @@ namespace FinanceSimplify.Dtos.Transactions {
         public int? Installments { get; set; }
         public Guid? CardId { get; set; }
         public Guid? CategoryId { get; set; }
+
+        public Guid? BankAccountId { get; set; }
     }
 }

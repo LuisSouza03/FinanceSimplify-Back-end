@@ -10,5 +10,7 @@ namespace FinanceSimplify.Dtos.Card {
         public required string Name { get; set; }
 
         public TypeCardTransactionEnum Type { get; set; }
+
+        public Guid? BankAccountId { get; set; }
     }
 }

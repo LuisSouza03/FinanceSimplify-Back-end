@@ -4,6 +4,7 @@ using FinanceSimplify.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace FinanceSimplify.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250222150238_addBankAccount")]
+    partial class addBankAccount
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -21,24 +24,6 @@ namespace FinanceSimplify.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
-
-            modelBuilder.Entity("FinanceSimplify.Models.BankAccount.BankAccountModel", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<string>("AccountName")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("BankAccount");
-                });
 
             modelBuilder.Entity("FinanceSimplify.Models.Card.CardModel", b =>
                 {
@@ -60,8 +45,6 @@ namespace FinanceSimplify.Migrations
                         .HasColumnType("uniqueidentifier");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("BankAccountId");
 
                     b.ToTable("Card");
                 });
@@ -93,7 +76,7 @@ namespace FinanceSimplify.Migrations
                     b.Property<decimal>("Amount")
                         .HasColumnType("decimal(18,2)");
 
-                    b.Property<Guid?>("BankAccountId")
+                    b.Property<Guid>("BankAccountId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<Guid?>("CardId")
@@ -122,8 +105,6 @@ namespace FinanceSimplify.Migrations
                         .HasColumnType("uniqueidentifier");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("BankAccountId");
 
                     b.ToTable("Transaction");
                 });
@@ -156,33 +137,6 @@ namespace FinanceSimplify.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Usuario");
-                });
-
-            modelBuilder.Entity("FinanceSimplify.Models.Card.CardModel", b =>
-                {
-                    b.HasOne("FinanceSimplify.Models.BankAccount.BankAccountModel", "BankAccount")
-                        .WithMany("Cards")
-                        .HasForeignKey("BankAccountId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("BankAccount");
-                });
-
-            modelBuilder.Entity("FinanceSimplify.Models.Transaction.TransactionModel", b =>
-                {
-                    b.HasOne("FinanceSimplify.Models.BankAccount.BankAccountModel", "BankAccount")
-                        .WithMany("Transactions")
-                        .HasForeignKey("BankAccountId");
-
-                    b.Navigation("BankAccount");
-                });
-
-            modelBuilder.Entity("FinanceSimplify.Models.BankAccount.BankAccountModel", b =>
-                {
-                    b.Navigation("Cards");
-
-                    b.Navigation("Transactions");
                 });
 #pragma warning restore 612, 618
         }

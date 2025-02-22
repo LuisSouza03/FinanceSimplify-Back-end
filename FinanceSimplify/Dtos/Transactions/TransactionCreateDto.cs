@@ -21,6 +21,9 @@ namespace FinanceSimplify.Dtos.Transactions {
         public Guid? CardId { get; set; }
 
         [Required(ErrorMessage = "O campo CategoryId é obrigatório")]
+        public Guid? BankAccountId { get; set; }
+
+        [Required(ErrorMessage = "O campo CategoryId é obrigatório")]
         public Guid? CategoryId { get; set; }
 
 

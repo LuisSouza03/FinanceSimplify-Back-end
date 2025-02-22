@@ -20,6 +20,7 @@ namespace FinanceSimplify.Services.CardService {
                     Name = cardDto.Name,
                     Type = cardDto.Type,
                     UserId = userId,
+                    BankAccountId = cardDto.BankAccountId
                 };
 
                 _context.Card.Add(card);
@@ -29,6 +30,7 @@ namespace FinanceSimplify.Services.CardService {
                     Id = card.Id,
                     Name = cardDto.Name,
                     Type = cardDto.Type,
+                    BankAccountId = cardDto.BankAccountId
                 };
 
                 response.Message = "Cartão cadastrado com sucesso!";

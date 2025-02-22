@@ -47,6 +47,12 @@ namespace FinanceSimplify.Services.TransactionService {
                 return response;
             }
 
+            if (transactionDto.BankAccountId is null) {
+                response.Status = false;
+                response.Message = "Deve inserir uma Conta Bancaria";
+                return response;
+            }
+
             try {
                 TransactionModel transaction = new() {
                     Id = Guid.NewGuid(),
@@ -58,7 +64,8 @@ namespace FinanceSimplify.Services.TransactionService {
                     Installments = transactionDto.Installments,
                     CardId = transactionDto.CardId,
                     CategoryId = transactionDto.CategoryId,
-                    UserId = userId
+                    UserId = userId,
+                    BankAccountId = transactionDto.BankAccountId
                 };
 
                 _context.Transaction.Add(transaction);
@@ -73,7 +80,8 @@ namespace FinanceSimplify.Services.TransactionService {
                     PaymentMethod = transactionDto.PaymentMethod,
                     Installments = transactionDto.Installments,
                     CardId = transactionDto.CardId,
-                    CategoryId = transactionDto.CategoryId
+                    CategoryId = transactionDto.CategoryId,
+                    BankAccountId = transactionDto.BankAccountId
                 };
 
                 response.Message = "Transação criada com sucesso!";

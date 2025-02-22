@@ -9,5 +9,8 @@ namespace FinanceSimplify.Dtos.Card {
 
         [Required(ErrorMessage = "O campo Type é obrigatório")]
         public TypeCardTransactionEnum Type { get; set; }
+
+        [Required(ErrorMessage = "O campo BankAccountId é obrigatório")]
+        public Guid BankAccountId { get; set; }
     }
 }

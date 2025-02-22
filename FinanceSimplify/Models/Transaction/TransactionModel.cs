@@ -1,6 +1,7 @@
 ﻿using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using FinanceSimplify.Enum;
+using FinanceSimplify.Models.BankAccount;
 using FinanceSimplify.Models.Card;
 using FinanceSimplify.Models.Category;
 
@@ -21,6 +22,11 @@ namespace FinanceSimplify.Models.Transaction {
         public Guid UserId { get; set; }
 
         public Guid? CardId { get; set; }
+
+        public Guid? BankAccountId { get; set; }
+
+        [ForeignKey("BankAccountId")]
+        public BankAccountModel BankAccount { get; set; } = null!;
 
         public Guid? CategoryId { get; set; }
     }
