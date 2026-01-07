@@ -1,20 +1,18 @@
-﻿using System.ComponentModel.DataAnnotations;
-using FinanceSimplify.Models.Card;
-using FinanceSimplify.Models.Transaction;
+﻿using MongoDB.Bson;
+using MongoDB.Bson.Serialization.Attributes;
 
 namespace FinanceSimplify.Models.BankAccount {
     public class BankAccountModel {
 
-        [Key]
+        [BsonId]
+        [BsonRepresentation(BsonType.String)]
         public Guid Id { get; set; } = Guid.NewGuid();
 
+        [BsonElement("accountName")]
         public required string AccountName { get; set; }
 
-        public List<CardModel> Cards { get; set; } = new();
-
-        public List<TransactionModel> Transactions { get; set; } = new();
-
+        [BsonElement("userId")]
+        [BsonRepresentation(BsonType.String)]
         public Guid UserId { get; set; }
-
     }
 }

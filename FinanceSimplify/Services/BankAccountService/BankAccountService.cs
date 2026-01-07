@@ -1,14 +1,14 @@
 ﻿using FinanceSimplify.Data;
 using FinanceSimplify.Dtos.BankAccount;
 using FinanceSimplify.Models.BankAccount;
-using Microsoft.EntityFrameworkCore;
+using MongoDB.Driver;
 
 namespace FinanceSimplify.Services.BankAccountService {
     public class BankAccountService: IBankAccountInterface {
 
-        private readonly AppDbContext _context;
+        private readonly MongoDbContext _context;
 
-        public BankAccountService(AppDbContext context) {
+        public BankAccountService(MongoDbContext context) {
             _context = context;
         }
 
@@ -22,8 +22,7 @@ namespace FinanceSimplify.Services.BankAccountService {
                     UserId = userId,
                 };
 
-                _context.BankAccount.Add(bankAccount);
-                await _context.SaveChangesAsync();
+                await _context.BankAccounts.InsertOneAsync(bankAccount);
 
                 response.BankAccountData = new BankAccountResponseDto {
                     Id = bankAccount.Id,
@@ -41,18 +40,15 @@ namespace FinanceSimplify.Services.BankAccountService {
 
 
         public async Task<List<BankAccountModel>> GetBankAccountsByUserId(Guid userId, int page, int pageSize) {
-            return await _context.BankAccount
-                .Where(b => b.UserId == userId)
-                .Include(b => b.Cards)
-                .Include(b => b.Transactions)
+            return await _context.BankAccounts
+                .Find(b => b.UserId == userId)
                 .ToListAsync();
         }
 
         public async Task<BankAccountModel?> GetBankAccountById(Guid id) {
-            return await _context.BankAccount
-                .Include(b => b.Cards)
-                .Include(b => b.Transactions)
-                .FirstOrDefaultAsync(b => b.Id == id);
+            return await _context.BankAccounts
+                .Find(b => b.Id == id)
+                .FirstOrDefaultAsync();
         }
 
        

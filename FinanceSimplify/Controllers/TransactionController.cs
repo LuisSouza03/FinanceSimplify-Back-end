@@ -39,9 +39,9 @@ namespace FinanceSimplify.Controllers {
 
         [Authorize]
         [HttpGet("byUser/{userId}")]
-        public async Task<ActionResult> GetTransactionsByUserId(Guid userId, int page = 1, int pageSize = 10) {
+        public async Task<ActionResult> GetTransactionsByUserId(Guid userId, int page = 1, int pageSize = 10, [FromQuery] TransactionFilterDto? filter = null) {
 
-            var response = await _transactionInterface.GetTransactionsByUserId(userId, page, pageSize);
+            var response = await _transactionInterface.GetTransactionsByUserId(userId, page, pageSize, filter);
             return Ok(response);
         }
 

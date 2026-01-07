@@ -4,13 +4,13 @@ using FinanceSimplify.Dtos.Transactions;
 using FinanceSimplify.Enum;
 using FinanceSimplify.Models.Transaction;
 using FinanceSimplify.Models.User;
-using Microsoft.EntityFrameworkCore;
+using MongoDB.Driver;
 
 namespace FinanceSimplify.Services.TransactionService {
     public class TransactionService : ITransactionInterface {
-        private readonly AppDbContext _context;
+        private readonly MongoDbContext _context;
 
-        public TransactionService(AppDbContext context) {
+        public TransactionService(MongoDbContext context) {
             _context = context;
         }
 
@@ -53,6 +53,7 @@ namespace FinanceSimplify.Services.TransactionService {
                 return response;
             }
 
+
             try {
                 TransactionModel transaction = new() {
                     Id = Guid.NewGuid(),
@@ -68,8 +69,7 @@ namespace FinanceSimplify.Services.TransactionService {
                     BankAccountId = transactionDto.BankAccountId
                 };
 
-                _context.Transaction.Add(transaction);
-                await _context.SaveChangesAsync();
+                await _context.Transactions.InsertOneAsync(transaction);
 
                 response.TransactionData = new TransactionResponseDto {
                     Id = transaction.Id,
@@ -99,7 +99,7 @@ namespace FinanceSimplify.Services.TransactionService {
             TransactionResponseModel<List<TransactionResponseDto>> response = new();
 
             try {
-                var transactions = await _context.Transaction.ToListAsync();
+                var transactions = await _context.Transactions.Find(_ => true).ToListAsync();
 
                 var data = transactions.Select(transactionDB => new TransactionResponseDto {
                     Name = transactionDB.Name,
@@ -127,11 +127,11 @@ namespace FinanceSimplify.Services.TransactionService {
 
         public async Task<List<TransactionModel>> GetTransactionsByCard(Guid cardId, int page, int pageSize) {
 
-            return await _context.Transaction
-                .Where(t => t.CardId == cardId)
-                .OrderByDescending(t => t.Date)
+            return await _context.Transactions
+                .Find(t => t.CardId == cardId)
+                .SortByDescending(t => t.Date)
                 .Skip((page - 1) * pageSize)
-                .Take(pageSize)
+                .Limit(pageSize)
                 .ToListAsync();
         }
 
@@ -140,7 +140,7 @@ namespace FinanceSimplify.Services.TransactionService {
 
             try {
 
-                var transaction = await _context.Transaction.FindAsync(transactionId);
+                var transaction = await _context.Transactions.Find(t => t.Id == transactionId).FirstOrDefaultAsync();
 
                 if (transaction == null) {
                     response.Message = "Transação não encontrada!";
@@ -170,43 +170,54 @@ namespace FinanceSimplify.Services.TransactionService {
             }
         }
 
-        public async Task<List<TransactionModel>> GetTransactionsByUserId(Guid userId, int page, int pageSize) {
+        public async Task<List<TransactionModel>> GetTransactionsByUserId(Guid userId, int page, int pageSize, TransactionFilterDto? filter = null) {
 
-            return await _context.Transaction
-                .Where(t => t.UserId == userId)
-                .OrderByDescending(t => t.Date)
+            var filterBuilder = Builders<TransactionModel>.Filter;
+            var mongoFilter = filterBuilder.Eq(t => t.UserId, userId);
+
+            if(filter?.StartDate.HasValue == true) {
+                mongoFilter = mongoFilter & filterBuilder.Gte(t => t.Date, filter.StartDate.Value);
+            }
+
+            if(filter?.EndDate.HasValue == true) {
+                mongoFilter = mongoFilter & filterBuilder.Lte(t => t.Date, filter.EndDate.Value);
+            }
+
+            return await _context.Transactions
+                .Find(mongoFilter)
+                .SortByDescending(t => t.Date)
                 .Skip((page - 1) * pageSize)
-                .Take(pageSize)
+                .Limit(pageSize)
                 .ToListAsync();
         }
 
         public async Task<List<TransactionModel>> GetTransactionByDateRange(Guid userId, DateTime startDate, DateTime endDate) {
             
-            return await _context.Transaction
-                .Where(t => t.UserId == userId && t.Date >= startDate && t.Date <= endDate)
-                .ToListAsync ();
+            var filterBuilder = Builders<TransactionModel>.Filter;
+            var filter = filterBuilder.Eq(t => t.UserId, userId) &
+                        filterBuilder.Gte(t => t.Date, startDate) &
+                        filterBuilder.Lte(t => t.Date, endDate);
+            
+            return await _context.Transactions.Find(filter).ToListAsync();
         }
 
         public async Task<List<TransactionModel>> GetTransactionByType(Guid userId, TypeTransactionEnum type) {
-            return await _context.Transaction
-                .Where(t => t.UserId == userId && t.Type == type)
-                .ToListAsync();
+            var filterBuilder = Builders<TransactionModel>.Filter;
+            var filter = filterBuilder.Eq(t => t.UserId, userId) & filterBuilder.Eq(t => t.Type, type);
+            return await _context.Transactions.Find(filter).ToListAsync();
         }
 
         public async Task<TransactionResponseModel<bool>> DeleteTransaction(Guid transactionId) {
             TransactionResponseModel<bool> response = new();
 
             try {
-                var transaction = await _context.Transaction.FirstOrDefaultAsync(transactionDb => transactionDb.Id == transactionId);
+                var result = await _context.Transactions.DeleteOneAsync(t => t.Id == transactionId);
 
-                if (transaction == null) {
+                if (result.DeletedCount == 0) {
                     response.Message = "Transação não encontrada!";
                     response.Status = false;
                     return response;
                 }
-
-                _context.Remove(transaction);
-                await _context.SaveChangesAsync();
 
                 response.TransactionData = true;
                 response.Message = "Transação removida com sucesso!";
@@ -225,7 +236,7 @@ namespace FinanceSimplify.Services.TransactionService {
 
             try {
 
-                var transaction = await _context.Transaction.FirstOrDefaultAsync(transactionDb => transactionDb.Id == transactionId);
+                var transaction = await _context.Transactions.Find(t => t.Id == transactionId).FirstOrDefaultAsync();
 
                 if (transaction == null) {
                     response.Message = "Nenhuma transaction localizada!";
@@ -241,8 +252,7 @@ namespace FinanceSimplify.Services.TransactionService {
                 transaction.CategoryId = transactionEditDto.CategoryId;
                 transaction.Date = transactionEditDto.Date;
 
-                _context.Update(transaction);
-                await _context.SaveChangesAsync();
+                await _context.Transactions.ReplaceOneAsync(t => t.Id == transactionId, transaction);
 
                 response.TransactionData = new TransactionResponseDto {
                     Id = transaction.Id,

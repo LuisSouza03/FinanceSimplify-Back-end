@@ -1,13 +1,13 @@
 ﻿using FinanceSimplify.Data;
 using FinanceSimplify.Dtos.Card;
 using FinanceSimplify.Models.Card;
-using Microsoft.EntityFrameworkCore;
+using MongoDB.Driver;
 
 namespace FinanceSimplify.Services.CardService {
     public class CardService : ICardInterface {
-        private readonly AppDbContext _context;
+        private readonly MongoDbContext _context;
 
-        public CardService(AppDbContext context) {
+        public CardService(MongoDbContext context) {
             _context = context;
         }
 
@@ -23,8 +23,7 @@ namespace FinanceSimplify.Services.CardService {
                     BankAccountId = cardDto.BankAccountId
                 };
 
-                _context.Card.Add(card);
-                await _context.SaveChangesAsync();
+                await _context.Cards.InsertOneAsync(card);
 
                 response.CardData = new CardResponseDto {
                     Id = card.Id,
@@ -48,7 +47,7 @@ namespace FinanceSimplify.Services.CardService {
 
             try {
 
-                var card = await _context.Card.FindAsync(cardId);
+                var card = await _context.Cards.Find(c => c.Id == cardId).FirstOrDefaultAsync();
 
                 if (card == null) {
                     response.Message = "Cartão não encontrado!";
@@ -77,31 +76,28 @@ namespace FinanceSimplify.Services.CardService {
 
         public async Task<List<CardModel>> GetCardByUserId(Guid userId, int page, int pageSize) {
 
-            return await _context.Card
-                .Where(c => c.UserId == userId)
+            return await _context.Cards
+                .Find(c => c.UserId == userId)
                 .Skip((page - 1) * pageSize)
-                .Take(pageSize)
+                .Limit(pageSize)
                 .ToListAsync();
         }
 
         public async Task<List<CardModel>> GetAllCards() {
-            return await _context.Card.ToListAsync();
+            return await _context.Cards.Find(_ => true).ToListAsync();
         }
 
         public async Task<CardResponseModel<bool>> DeleteCard(Guid userId, Guid cardId) {
              CardResponseModel<bool> response = new();
 
             try {
-                var card = await _context.Card.FirstOrDefaultAsync(cardDb => cardDb.Id == cardId && cardDb.UserId == userId);
+                var result = await _context.Cards.DeleteOneAsync(c => c.Id == cardId && c.UserId == userId);
 
-                if (card == null) {
+                if (result.DeletedCount == 0) {
                     response.Message = "Nenhum cartão encontrado!";
                     response.Status = false;
                     return response;
                 }
-
-                _context.Remove(card);
-                await _context.SaveChangesAsync();
 
                 response.CardData = true;
                 response.Message = "Cartão excluido com sucesso!";

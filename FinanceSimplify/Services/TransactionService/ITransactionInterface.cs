@@ -13,7 +13,7 @@ namespace FinanceSimplify.Services.TransactionService {
 
         Task<TransactionResponseModel<TransactionResponseDto>> GetTransactionById(Guid id);
 
-        Task<List<TransactionModel>> GetTransactionsByUserId(Guid userId, int page, int pageSize);
+        Task<List<TransactionModel>> GetTransactionsByUserId(Guid userId, int page, int pageSize, TransactionFilterDto? filter = null);
 
         Task<List<TransactionModel>> GetTransactionByDateRange(Guid userId, DateTime startDate, DateTime endDate);
 

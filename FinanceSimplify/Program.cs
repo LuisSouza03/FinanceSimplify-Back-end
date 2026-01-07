@@ -7,9 +7,9 @@ using FinanceSimplify.Services.Category;
 using FinanceSimplify.Services.PasswordService;
 using FinanceSimplify.Services.TransactionService;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using MongoDB.Driver;
 using Swashbuckle.AspNetCore.Filters;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -28,10 +28,14 @@ builder.Services.AddScoped<ICardInterface, CardService>();
 builder.Services.AddScoped<ICategoryInterface, CategoryService>();
 builder.Services.AddScoped<IBankAccountInterface, BankAccountService>();
 
-builder.Services.AddDbContext<AppDbContext>(options => {
-
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"));
+// Configure MongoDB
+var mongoSettings = builder.Configuration.GetSection("MongoDbSettings").Get<MongoDbSettings>();
+builder.Services.AddSingleton<IMongoClient>(sp => new MongoClient(mongoSettings!.ConnectionString));
+builder.Services.AddScoped<IMongoDatabase>(sp => {
+    var client = sp.GetRequiredService<IMongoClient>();
+    return client.GetDatabase(mongoSettings!.DatabaseName);
 });
+builder.Services.AddScoped<MongoDbContext>();
 
 
 
@@ -63,12 +67,10 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJw
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+
+app.UseSwagger();
+app.UseSwaggerUI();
+
 
 app.UseHttpsRedirection();
 

@@ -2,14 +2,14 @@
 using FinanceSimplify.Dtos.User;
 using FinanceSimplify.Models.User;
 using FinanceSimplify.Services.PasswordService;
-using Microsoft.EntityFrameworkCore;
+using MongoDB.Driver;
 
 namespace FinanceSimplify.Services.AuthService {
     public class AuthService: IAuthInterface {
-        private readonly AppDbContext _context;
+        private readonly MongoDbContext _context;
         private readonly IPasswordInterface _passwordInterface;
 
-        public AuthService(AppDbContext context, IPasswordInterface passwordInterface) {
+        public AuthService(MongoDbContext context, IPasswordInterface passwordInterface) {
             this._context = context;
             this._passwordInterface = passwordInterface;
         }
@@ -39,8 +39,7 @@ namespace FinanceSimplify.Services.AuthService {
                     PasswordSalt = passwordSalt
                 };
 
-                _context.Add(user);
-                await _context.SaveChangesAsync();
+                await _context.Users.InsertOneAsync(user);
 
                 response.Message = "Usuário criado com suceso!";
                 return response;
@@ -61,7 +60,7 @@ namespace FinanceSimplify.Services.AuthService {
 
             try {
 
-                var user = await _context.Usuario.FirstOrDefaultAsync(userBanco => userBanco.Email == userLogin.Email);
+                var user = await _context.Users.Find(u => u.Email == userLogin.Email).FirstOrDefaultAsync();
 
                 if (user == null) {
                     response.Message = "Credencias inválidas!";
@@ -92,7 +91,7 @@ namespace FinanceSimplify.Services.AuthService {
 
         public bool UserAndEmailExists(UserCreateDto userRegister) {
 
-            var user = _context.Usuario.FirstOrDefault(userBanco => userBanco.Email == userRegister.Email);
+            var user = _context.Users.Find(u => u.Email == userRegister.Email).FirstOrDefault();
 
             if (user != null) return false;
 

@@ -9,8 +9,5 @@ namespace FinanceSimplify.Dtos.Category {
 
         [Required(ErrorMessage = "O campo Name é obrigatório")]
         public required string Name { get; set; }
-
-        [Required(ErrorMessage = "O campo Type é obrigatório")]
-        public TypeCardTransactionEnum Type { get; set; }
     }
 }

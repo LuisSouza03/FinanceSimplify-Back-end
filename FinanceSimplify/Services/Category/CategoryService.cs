@@ -1,13 +1,13 @@
 ﻿using FinanceSimplify.Data;
 using FinanceSimplify.Dtos.Category;
 using FinanceSimplify.Models.Category;
-using Microsoft.EntityFrameworkCore;
+using MongoDB.Driver;
 
 namespace FinanceSimplify.Services.Category {
     public class CategoryService: ICategoryInterface {
-        private readonly AppDbContext _context;
+        private readonly MongoDbContext _context;
 
-        public CategoryService(AppDbContext context) {
+        public CategoryService(MongoDbContext context) {
             _context = context;
         }
 
@@ -21,8 +21,7 @@ namespace FinanceSimplify.Services.Category {
                     UserId = userId,
                 };
 
-                _context.Categories.Add(category);
-                await _context.SaveChangesAsync();
+                await _context.Categories.InsertOneAsync(category);
 
                 response.CategoryData = new CategoryResponseDto {
                     Id = category.Id,
@@ -44,9 +43,9 @@ namespace FinanceSimplify.Services.Category {
         public async Task<List<CategoryModel>> GetCategoriesByUserId(Guid userId, int page, int pageSize) {
 
             return await _context.Categories
-                .Where(c => c.UserId ==  userId)
+                .Find(c => c.UserId ==  userId)
                 .Skip((page - 1) * pageSize)
-                .Take(pageSize)
+                .Limit(pageSize)
                 .ToListAsync();
         }
 
@@ -54,16 +53,13 @@ namespace FinanceSimplify.Services.Category {
             CategoryResponseModel<bool> response = new();
 
             try {
-                var category = await _context.Categories.FirstOrDefaultAsync(categoryDb => categoryDb.Id == categoryId && categoryDb.UserId == UserId);
+                var result = await _context.Categories.DeleteOneAsync(c => c.Id == categoryId && c.UserId == UserId);
 
-                if(category == null) {
+                if(result.DeletedCount == 0) {
                     response.Message = "Categoria não encontrada";
                     response.Status = false;
                     return response;
                 }
-
-                _context.Remove(category);
-                await _context.SaveChangesAsync();
 
                 response.CategoryData = true;
                 response.Message = "Categoria removida com sucesso!";
