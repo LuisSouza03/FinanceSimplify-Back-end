@@ -1,0 +1,23 @@
+## Build results
+bin/
+obj/
+
+## User-specific files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Visual Studio
+.vs/
+.vscode/
+
+## Sensitive files - DO NOT COMMIT
+appsettings.Development.json
+.env
+*.pfx
+*.p12
+
+## OS files
+.DS_Store
+Thumbs.db

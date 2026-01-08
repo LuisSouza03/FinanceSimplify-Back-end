@@ -72,7 +72,7 @@ app.UseSwagger();
 app.UseSwaggerUI();
 
 
-app.UseHttpsRedirection();
+// app.UseHttpsRedirection(); // Commented for local development
 
 app.UseAuthentication();
 app.UseAuthorization();
