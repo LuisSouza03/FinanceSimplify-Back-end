@@ -3,11 +3,12 @@ FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
 # Copy csproj and restore dependencies
-COPY FinanceSimplify.csproj .
+COPY FinanceSimplify/FinanceSimplify.csproj ./FinanceSimplify/
+WORKDIR /src/FinanceSimplify
 RUN dotnet restore
 
 # Copy everything else and build
-COPY . .
+COPY FinanceSimplify/ .
 RUN dotnet publish -c Release -o /app/publish
 
 # Runtime stage
