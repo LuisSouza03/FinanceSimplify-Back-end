@@ -35,8 +35,9 @@ var mongoSettings = builder.Configuration.GetSection("MongoDbSettings").Get<Mong
 var mongoClientSettings = MongoClientSettings.FromConnectionString(mongoSettings!.ConnectionString);
 mongoClientSettings.SslSettings = new MongoDB.Driver.SslSettings
 {
-    EnabledSslProtocols = System.Security.Authentication.SslProtocols.Tls12,
-    CheckCertificateRevocation = false
+    EnabledSslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13,
+    CheckCertificateRevocation = false,
+    ServerCertificateValidationCallback = (sender, certificate, chain, errors) => true // Allow all certificates
 };
 mongoClientSettings.ServerSelectionTimeout = TimeSpan.FromSeconds(30);
 mongoClientSettings.ConnectTimeout = TimeSpan.FromSeconds(30);
