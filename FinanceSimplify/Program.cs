@@ -72,11 +72,13 @@ app.UseSwagger();
 app.UseSwaggerUI();
 
 
-// app.UseHttpsRedirection(); // Commented for local development
+app.UseHttpsRedirection();
+
+// CORS must come before Authentication and Authorization
+app.UseCors(x => x.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
 
 app.UseAuthentication();
 app.UseAuthorization();
-app.UseCors(x => x.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
 
 app.MapControllers();
 
