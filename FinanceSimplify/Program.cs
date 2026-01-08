@@ -30,7 +30,18 @@ builder.Services.AddScoped<IBankAccountInterface, BankAccountService>();
 
 // Configure MongoDB
 var mongoSettings = builder.Configuration.GetSection("MongoDbSettings").Get<MongoDbSettings>();
-builder.Services.AddSingleton<IMongoClient>(sp => new MongoClient(mongoSettings!.ConnectionString));
+
+// Configure MongoDB client settings for Railway/Linux compatibility
+var mongoClientSettings = MongoClientSettings.FromConnectionString(mongoSettings!.ConnectionString);
+mongoClientSettings.SslSettings = new MongoDB.Driver.SslSettings
+{
+    EnabledSslProtocols = System.Security.Authentication.SslProtocols.Tls12,
+    CheckCertificateRevocation = false
+};
+mongoClientSettings.ServerSelectionTimeout = TimeSpan.FromSeconds(30);
+mongoClientSettings.ConnectTimeout = TimeSpan.FromSeconds(30);
+
+builder.Services.AddSingleton<IMongoClient>(sp => new MongoClient(mongoClientSettings));
 builder.Services.AddScoped<IMongoDatabase>(sp => {
     var client = sp.GetRequiredService<IMongoClient>();
     return client.GetDatabase(mongoSettings!.DatabaseName);
