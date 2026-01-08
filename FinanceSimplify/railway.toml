@@ -1,0 +1,5 @@
+[build]
+# Specify the root directory where the Dockerfile is located
+dockerfilePath = "FinanceSimplify/Dockerfile"
+# Set the working directory context for the build
+workingDirectory = "FinanceSimplify"
