@@ -423,7 +423,7 @@ namespace FinanceSimplify.Services.TransactionService {
                 }
 
                 // Verificar se o cartão tem conta bancária
-                if (!card.BankAccountId.HasValue) {
+                if (card.BankAccountId == Guid.Empty) {
                     response.Status = false;
                     response.Message = "O cartão não possui uma conta bancária associada";
                     return response;
@@ -504,7 +504,7 @@ namespace FinanceSimplify.Services.TransactionService {
                             CardId = cardId,
                             CategoryId = category.Id,
                             UserId = userId,
-                            BankAccountId = card.BankAccountId.Value
+                            BankAccountId = card.BankAccountId
                         };
 
                         await _context.Transactions.InsertOneAsync(transaction);
