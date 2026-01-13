@@ -247,20 +247,55 @@ namespace FinanceSimplify.Services.InvoiceService {
             InvoiceResponseModel<bool> response = new();
 
             try {
-                var update = Builders<InvoiceModel>.Update
-                    .Set(i => i.IsPaid, true)
-                    .Set(i => i.PaidDate, DateTime.UtcNow);
-
-                var result = await _context.Invoices.UpdateOneAsync(i => i.Id == invoiceId, update);
-
-                if (result.ModifiedCount == 0) {
+                // Buscar a fatura para pegar o cardId
+                var invoice = await _context.Invoices.Find(i => i.Id == invoiceId).FirstOrDefaultAsync();
+                
+                if (invoice == null) {
                     response.Message = "Fatura não encontrada!";
                     response.Status = false;
                     return response;
                 }
 
+                // Marcar fatura como paga
+                var invoiceUpdate = Builders<InvoiceModel>.Update
+                    .Set(i => i.IsPaid, true)
+                    .Set(i => i.PaidDate, DateTime.UtcNow);
+
+                await _context.Invoices.UpdateOneAsync(i => i.Id == invoiceId, invoiceUpdate);
+
+                // Buscar todas as parcelas desta fatura
+                var installments = await _installmentService.GetInstallmentsByInvoice(invoiceId);
+
+                // Marcar todas as parcelas como pagas
+                var installmentUpdate = Builders<Models.Installment.InstallmentModel>.Update
+                    .Set(i => i.IsPaid, true);
+
+                foreach (var installment in installments) {
+                    await _context.Installments.UpdateOneAsync(
+                        i => i.Id == installment.Id,
+                        installmentUpdate
+                    );
+                }
+
+                // Recalcular e atualizar o limite disponível do cartão
+                var card = await _context.Cards.Find(c => c.Id == invoice.CardId).FirstOrDefaultAsync();
+                if (card != null && card.CreditLimit.HasValue) {
+                    // Buscar todas as parcelas pendentes (não pagas) do cartão
+                    var pendingInstallments = await _context.Installments
+                        .Find(i => i.CardId == invoice.CardId && !i.IsPaid)
+                        .ToListAsync();
+
+                    var usedLimit = pendingInstallments.Sum(i => i.Amount);
+                    var availableLimit = card.CreditLimit.Value - usedLimit;
+
+                    var cardUpdate = Builders<Models.Card.CardModel>.Update
+                        .Set(c => c.AvailableLimit, availableLimit);
+
+                    await _context.Cards.UpdateOneAsync(c => c.Id == invoice.CardId, cardUpdate);
+                }
+
                 response.InvoiceData = true;
-                response.Message = "Fatura marcada como paga!";
+                response.Message = "Fatura marcada como paga e limite do cartão atualizado!";
                 return response;
             }
             catch (Exception ex) {
