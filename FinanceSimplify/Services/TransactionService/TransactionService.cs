@@ -7,6 +7,10 @@ using FinanceSimplify.Models.User;
 using FinanceSimplify.Services.InstallmentService;
 using FinanceSimplify.Services.CardService;
 using FinanceSimplify.Services.InvoiceService;
+using FinanceSimplify.Services.Category;
+using FinanceSimplify.Models.Category;
+using FinanceSimplify.Dtos.Category;
+using FinanceSimplify.Models.Installment;
 using MongoDB.Driver;
 
 namespace FinanceSimplify.Services.TransactionService {
@@ -15,12 +19,14 @@ namespace FinanceSimplify.Services.TransactionService {
         private readonly IInstallmentInterface _installmentService;
         private readonly ICardInterface _cardService;
         private readonly IInvoiceInterface _invoiceService;
+        private readonly ICategoryInterface _categoryService;
 
-        public TransactionService(MongoDbContext context, IInstallmentInterface installmentService, ICardInterface cardService, IInvoiceInterface invoiceService) {
+        public TransactionService(MongoDbContext context, IInstallmentInterface installmentService, ICardInterface cardService, IInvoiceInterface invoiceService, ICategoryInterface categoryService) {
             _context = context;
             _installmentService = installmentService;
             _cardService = cardService;
             _invoiceService = invoiceService;
+            _categoryService = categoryService;
         }
 
         public async Task<TransactionResponseModel<TransactionResponseDto>> CreateTransaction(Guid userId, TransactionCreateDto transactionDto) {
@@ -388,6 +394,245 @@ namespace FinanceSimplify.Services.TransactionService {
                 return response;
             }
              
+        }
+
+        public async Task<TransactionResponseModel<CsvTransactionImportResultDto>> ImportTransactionsFromCsv(Guid userId, Guid cardId, IFormFile csvFile) {
+            TransactionResponseModel<CsvTransactionImportResultDto> response = new();
+            CsvTransactionImportResultDto result = new();
+
+            try {
+                // Validar arquivo
+                if (csvFile == null || csvFile.Length == 0) {
+                    response.Status = false;
+                    response.Message = "Arquivo CSV está vazio ou não foi fornecido";
+                    return response;
+                }
+
+                if (!csvFile.FileName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase)) {
+                    response.Status = false;
+                    response.Message = "O arquivo deve ter extensão .csv";
+                    return response;
+                }
+
+                // Verificar se o cartão existe e pertence ao usuário
+                var card = await _context.Cards.Find(c => c.Id == cardId && c.UserId == userId).FirstOrDefaultAsync();
+                if (card == null) {
+                    response.Status = false;
+                    response.Message = "Cartão não encontrado ou não pertence ao usuário";
+                    return response;
+                }
+
+                // Verificar se o cartão tem conta bancária
+                if (!card.BankAccountId.HasValue) {
+                    response.Status = false;
+                    response.Message = "O cartão não possui uma conta bancária associada";
+                    return response;
+                }
+
+                // Ler o arquivo CSV
+                using var reader = new StreamReader(csvFile.OpenReadStream());
+                string? headerLine = await reader.ReadLineAsync();
+                
+                if (string.IsNullOrWhiteSpace(headerLine)) {
+                    response.Status = false;
+                    response.Message = "Arquivo CSV está vazio";
+                    return response;
+                }
+
+                int lineNumber = 1;
+                string? line;
+
+                while ((line = await reader.ReadLineAsync()) != null) {
+                    lineNumber++;
+                    
+                    if (string.IsNullOrWhiteSpace(line)) {
+                        continue;
+                    }
+
+                    try {
+                        // Parse da linha CSV
+                        var fields = CsvParser.ParseCsvLine(line);
+                        
+                        if (!CsvParser.IsValidCsvLine(fields, 5)) {
+                            result.Errors.Add($"Linha {lineNumber}: Formato inválido - esperado 5 campos, encontrado {fields.Count}");
+                            continue;
+                        }
+
+                        // Extrair campos
+                        string dateStr = fields[0];
+                        string lancamento = fields[1];
+                        string categoriaName = fields[2];
+                        string tipo = fields[3];
+                        string valorStr = fields[4];
+
+                        // Parse dos dados
+                        DateTime purchaseDate = CsvParser.ParseBrazilianDate(dateStr);
+                        decimal amount = CsvParser.ParseBrazilianCurrency(valorStr);
+                        var (currentInstallment, totalInstallments) = CsvParser.ExtractInstallmentInfo(tipo);
+
+                        // Buscar ou criar categoria
+                        var category = await _categoryService.GetCategoryByName(userId, categoriaName);
+                        
+                        if (category == null) {
+                            // Criar categoria automaticamente
+                            var categoryDto = new CategoryDto { Name = categoriaName };
+                            var categoryResponse = await _categoryService.CreateCategory(userId, categoryDto);
+                            
+                            if (categoryResponse.Status && categoryResponse.CategoryData != null) {
+                                category = new CategoryModel {
+                                    Id = categoryResponse.CategoryData.Id,
+                                    Name = categoryResponse.CategoryData.Name,
+                                    UserId = userId
+                                };
+                                result.CategoriesCreated++;
+                                result.NewCategories.Add(categoriaName);
+                            } else {
+                                result.Errors.Add($"Linha {lineNumber}: Erro ao criar categoria '{categoriaName}'");
+                                continue;
+                            }
+                        }
+
+                        // Criar transação
+                        TransactionModel transaction = new() {
+                            Id = Guid.NewGuid(),
+                            Name = lancamento,
+                            Amount = amount,
+                            Date = purchaseDate,
+                            Type = TypeTransactionEnum.Despesa,
+                            PaymentMethod = TypePaymentMethodEnum.Credito,
+                            Installments = totalInstallments > 0 ? totalInstallments : 1,
+                            CardId = cardId,
+                            CategoryId = category.Id,
+                            UserId = userId,
+                            BankAccountId = card.BankAccountId.Value
+                        };
+
+                        await _context.Transactions.InsertOneAsync(transaction);
+                        result.TransactionsCreated++;
+
+                        // Criar parcelas
+                        if (totalInstallments > 0 && currentInstallment > 0) {
+                            // Tem parcelas - criar todas até a parcela atual
+                            if (card.DueDay.HasValue) {
+                                // Calcular data de vencimento da parcela atual
+                                var currentDueDate = new DateTime(purchaseDate.Year, purchaseDate.Month, card.DueDay.Value);
+                                
+                                // Se a compra foi depois do dia de fechamento, vence no próximo mês
+                                if (card.ClosingDay.HasValue && purchaseDate.Day > card.ClosingDay.Value) {
+                                    currentDueDate = currentDueDate.AddMonths(1);
+                                }
+
+                                // Criar parcelas de 1 até currentInstallment
+                                for (int i = 1; i <= currentInstallment; i++) {
+                                    // Calcular data de vencimento desta parcela
+                                    // Parcela 1 vence em currentDueDate - (currentInstallment - 1) meses
+                                    var installmentDueDate = currentDueDate.AddMonths(-(currentInstallment - i));
+
+                                    InstallmentModel installment = new() {
+                                        Id = Guid.NewGuid(),
+                                        TransactionId = transaction.Id,
+                                        CardId = cardId,
+                                        UserId = userId,
+                                        Amount = amount,
+                                        InstallmentNumber = i,
+                                        TotalInstallments = totalInstallments,
+                                        DueDate = installmentDueDate,
+                                        IsPaid = i < currentInstallment, // Parcelas anteriores já foram pagas
+                                        Description = $"{lancamento} - Parcela {i}/{totalInstallments}",
+                                        CreatedAt = DateTime.UtcNow
+                                    };
+
+                                    await _context.Installments.InsertOneAsync(installment);
+                                    result.InstallmentsCreated++;
+
+                                    // Associar à fatura do mês correspondente
+                                    try {
+                                        var invoice = await _invoiceService.GenerateInvoiceForCard(
+                                            cardId, 
+                                            userId, 
+                                            installmentDueDate.Month, 
+                                            installmentDueDate.Year
+                                        );
+                                        
+                                        if (invoice != null && invoice.InvoiceData != null) {
+                                            // Atualizar parcela com InvoiceId
+                                            var update = Builders<InstallmentModel>.Update.Set(inst => inst.InvoiceId, invoice.InvoiceData.Id);
+                                            await _context.Installments.UpdateOneAsync(inst => inst.Id == installment.Id, update);
+                                        }
+                                    } catch {
+                                        // Fatura pode já existir, continuar
+                                    }
+                                }
+                            }
+                        } else {
+                            // Compra à vista - criar apenas uma parcela
+                            var dueDate = purchaseDate;
+                            if (card.DueDay.HasValue) {
+                                dueDate = new DateTime(purchaseDate.Year, purchaseDate.Month, card.DueDay.Value);
+                                if (card.ClosingDay.HasValue && purchaseDate.Day > card.ClosingDay.Value) {
+                                    dueDate = dueDate.AddMonths(1);
+                                }
+                            }
+
+                            InstallmentModel installment = new() {
+                                Id = Guid.NewGuid(),
+                                TransactionId = transaction.Id,
+                                CardId = cardId,
+                                UserId = userId,
+                                Amount = amount,
+                                InstallmentNumber = 1,
+                                TotalInstallments = 1,
+                                DueDate = dueDate,
+                                IsPaid = false,
+                                Description = $"{lancamento} - À vista",
+                                CreatedAt = DateTime.UtcNow
+                            };
+
+                            await _context.Installments.InsertOneAsync(installment);
+                            result.InstallmentsCreated++;
+
+                            // Associar à fatura
+                            try {
+                                var invoice = await _invoiceService.GenerateInvoiceForCard(
+                                    cardId, 
+                                    userId, 
+                                    dueDate.Month, 
+                                    dueDate.Year
+                                );
+                                
+                                if (invoice != null && invoice.InvoiceData != null) {
+                                    var update = Builders<InstallmentModel>.Update.Set(inst => inst.InvoiceId, invoice.InvoiceData.Id);
+                                    await _context.Installments.UpdateOneAsync(inst => inst.Id == installment.Id, update);
+                                }
+                            } catch {
+                                // Fatura pode já existir, continuar
+                            }
+                        }
+
+                        result.TotalProcessed++;
+
+                    } catch (Exception ex) {
+                        result.Errors.Add($"Linha {lineNumber}: {ex.Message}");
+                    }
+                }
+
+                // Atualizar limite disponível do cartão
+                if (card.CreditLimit.HasValue) {
+                    var newAvailableLimit = await _cardService.GetAvailableLimit(cardId);
+                    await _cardService.UpdateAvailableLimit(cardId, newAvailableLimit);
+                }
+
+                response.TransactionData = result;
+                response.Message = $"Importação concluída! {result.TransactionsCreated} transações criadas, {result.InstallmentsCreated} parcelas criadas, {result.CategoriesCreated} categorias criadas.";
+                response.Status = true;
+                return response;
+
+            } catch (Exception ex) {
+                response.Message = $"Erro ao processar arquivo CSV: {ex.Message}";
+                response.Status = false;
+                response.TransactionData = result;
+                return response;
+            }
         }
 
         

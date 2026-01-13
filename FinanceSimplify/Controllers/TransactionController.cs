@@ -79,5 +79,13 @@ namespace FinanceSimplify.Controllers {
             var response = await _transactionInterface.EditTransaction(transactionId, transactionEditDto);
             return Ok(response);
         }
+
+        [Authorize]
+        [HttpPost("import-csv/{userId}")]
+        [Consumes("multipart/form-data")]
+        public async Task<ActionResult> ImportCsv(Guid userId, [FromForm] Guid cardId, [FromForm] IFormFile csvFile) {
+            var response = await _transactionInterface.ImportTransactionsFromCsv(userId, cardId, csvFile);
+            return Ok(response);
+        }
     }
 }

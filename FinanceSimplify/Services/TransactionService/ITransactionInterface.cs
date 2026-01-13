@@ -22,5 +22,7 @@ namespace FinanceSimplify.Services.TransactionService {
         Task<TransactionResponseModel<bool>> DeleteTransaction(Guid id);
 
         Task<TransactionResponseModel<TransactionResponseDto>> EditTransaction(Guid transactionId, TransactionEditDto transactionEditDto);
+
+        Task<TransactionResponseModel<CsvTransactionImportResultDto>> ImportTransactionsFromCsv(Guid userId, Guid cardId, IFormFile csvFile);
     }
 }

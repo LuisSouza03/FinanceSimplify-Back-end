@@ -72,5 +72,11 @@ namespace FinanceSimplify.Services.Category {
             }
         }
 
+        public async Task<CategoryModel?> GetCategoryByName(Guid userId, string categoryName) {
+            return await _context.Categories
+                .Find(c => c.UserId == userId && c.Name.ToLower() == categoryName.ToLower())
+                .FirstOrDefaultAsync();
+        }
+
     }
 }

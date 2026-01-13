@@ -9,5 +9,7 @@ namespace FinanceSimplify.Services.Category {
         Task<List<CategoryModel>> GetCategoriesByUserId(Guid userId, int page, int pageSize);
 
         Task<CategoryResponseModel<bool>> DeleteCategory(Guid UserId, Guid categoryId);
+
+        Task<CategoryModel?> GetCategoryByName(Guid userId, string categoryName);
     }
 }
