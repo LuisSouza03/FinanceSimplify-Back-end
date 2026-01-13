@@ -514,6 +514,10 @@ namespace FinanceSimplify.Services.TransactionService {
                         if (totalInstallments > 0 && currentInstallment > 0) {
                             // Tem parcelas - criar todas até a parcela atual
                             if (card.DueDay.HasValue) {
+                                var today = DateTime.Today;
+                                var installmentsToInsert = new List<InstallmentModel>();
+                                var invoiceMonthsToGenerate = new HashSet<(int month, int year)>();
+                                
                                 // Calcular data de vencimento da parcela atual
                                 var currentDueDate = new DateTime(purchaseDate.Year, purchaseDate.Month, card.DueDay.Value);
                                 
@@ -525,7 +529,6 @@ namespace FinanceSimplify.Services.TransactionService {
                                 // Criar parcelas de 1 até currentInstallment
                                 for (int i = 1; i <= currentInstallment; i++) {
                                     // Calcular data de vencimento desta parcela
-                                    // Parcela 1 vence em currentDueDate - (currentInstallment - 1) meses
                                     var installmentDueDate = currentDueDate.AddMonths(-(currentInstallment - i));
 
                                     InstallmentModel installment = new() {
@@ -537,28 +540,25 @@ namespace FinanceSimplify.Services.TransactionService {
                                         InstallmentNumber = i,
                                         TotalInstallments = totalInstallments,
                                         DueDate = installmentDueDate,
-                                        IsPaid = i < currentInstallment, // Parcelas anteriores já foram pagas
+                                        IsPaid = installmentDueDate.Date < today, // Pago se vencimento já passou
                                         Description = $"{lancamento} - Parcela {i}/{totalInstallments}",
                                         CreatedAt = DateTime.UtcNow
                                     };
 
-                                    await _context.Installments.InsertOneAsync(installment);
-                                    result.InstallmentsCreated++;
-
-                                    // Associar à fatura do mês correspondente
+                                    installmentsToInsert.Add(installment);
+                                    invoiceMonthsToGenerate.Add((installmentDueDate.Month, installmentDueDate.Year));
+                                }
+                                
+                                // Inserir todas as parcelas de uma vez (batch insert)
+                                if (installmentsToInsert.Count > 0) {
+                                    await _context.Installments.InsertManyAsync(installmentsToInsert);
+                                    result.InstallmentsCreated += installmentsToInsert.Count;
+                                }
+                                
+                                // Gerar faturas necessárias (fora do loop para melhor performance)
+                                foreach (var (month, year) in invoiceMonthsToGenerate) {
                                     try {
-                                        var invoice = await _invoiceService.GenerateInvoiceForCard(
-                                            cardId, 
-                                            userId, 
-                                            installmentDueDate.Month, 
-                                            installmentDueDate.Year
-                                        );
-                                        
-                                        if (invoice != null && invoice.InvoiceData != null) {
-                                            // Atualizar parcela com InvoiceId
-                                            var update = Builders<InstallmentModel>.Update.Set(inst => inst.InvoiceId, invoice.InvoiceData.Id);
-                                            await _context.Installments.UpdateOneAsync(inst => inst.Id == installment.Id, update);
-                                        }
+                                        await _invoiceService.GenerateInvoiceForCard(cardId, userId, month, year);
                                     } catch {
                                         // Fatura pode já existir, continuar
                                     }
@@ -583,7 +583,7 @@ namespace FinanceSimplify.Services.TransactionService {
                                 InstallmentNumber = 1,
                                 TotalInstallments = 1,
                                 DueDate = dueDate,
-                                IsPaid = false,
+                                IsPaid = dueDate.Date < DateTime.Today, // Pago se vencimento já passou
                                 Description = $"{lancamento} - À vista",
                                 CreatedAt = DateTime.UtcNow
                             };
@@ -591,19 +591,9 @@ namespace FinanceSimplify.Services.TransactionService {
                             await _context.Installments.InsertOneAsync(installment);
                             result.InstallmentsCreated++;
 
-                            // Associar à fatura
+                            // Gerar fatura
                             try {
-                                var invoice = await _invoiceService.GenerateInvoiceForCard(
-                                    cardId, 
-                                    userId, 
-                                    dueDate.Month, 
-                                    dueDate.Year
-                                );
-                                
-                                if (invoice != null && invoice.InvoiceData != null) {
-                                    var update = Builders<InstallmentModel>.Update.Set(inst => inst.InvoiceId, invoice.InvoiceData.Id);
-                                    await _context.Installments.UpdateOneAsync(inst => inst.Id == installment.Id, update);
-                                }
+                                await _invoiceService.GenerateInvoiceForCard(cardId, userId, dueDate.Month, dueDate.Year);
                             } catch {
                                 // Fatura pode já existir, continuar
                             }
