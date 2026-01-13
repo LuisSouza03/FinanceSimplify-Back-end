@@ -294,16 +294,46 @@ namespace FinanceSimplify.Services.TransactionService {
             TransactionResponseModel<bool> response = new();
 
             try {
-                var result = await _context.Transactions.DeleteOneAsync(t => t.Id == transactionId);
+                // Buscar a transação antes de deletar para pegar informações
+                var transaction = await _context.Transactions.Find(t => t.Id == transactionId).FirstOrDefaultAsync();
 
-                if (result.DeletedCount == 0) {
+                if (transaction == null) {
                     response.Message = "Transação não encontrada!";
                     response.Status = false;
                     return response;
                 }
 
+                // Buscar parcelas associadas a esta transação
+                var installments = await _installmentService.GetInstallmentsByTransaction(transactionId);
+
+                // Guardar IDs das faturas afetadas para recalcular depois
+                var affectedInvoiceIds = installments
+                    .Where(i => i.InvoiceId.HasValue)
+                    .Select(i => i.InvoiceId.Value)
+                    .Distinct()
+                    .ToList();
+
+                // Deletar todas as parcelas desta transação
+                await _context.Installments.DeleteManyAsync(i => i.TransactionId == transactionId);
+
+                // Deletar a transação
+                await _context.Transactions.DeleteOneAsync(t => t.Id == transactionId);
+
+                // Recalcular total das faturas afetadas
+                foreach (var invoiceId in affectedInvoiceIds) {
+                    var total = await _invoiceService.CalculateInvoiceTotal(invoiceId);
+                    var update = Builders<Models.Invoice.InvoiceModel>.Update.Set(i => i.TotalAmount, total);
+                    await _context.Invoices.UpdateOneAsync(i => i.Id == invoiceId, update);
+                }
+
+                // Se a transação tinha cartão, recalcular o limite disponível
+                if (transaction.CardId.HasValue) {
+                    var newAvailableLimit = await _cardService.GetAvailableLimit(transaction.CardId.Value);
+                    await _cardService.UpdateAvailableLimit(transaction.CardId.Value, newAvailableLimit);
+                }
+
                 response.TransactionData = true;
-                response.Message = "Transação removida com sucesso!";
+                response.Message = "Transação e parcelas removidas com sucesso! Limite do cartão atualizado.";
                 return response;
 
             }
