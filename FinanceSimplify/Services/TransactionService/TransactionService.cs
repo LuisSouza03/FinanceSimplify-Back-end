@@ -6,6 +6,7 @@ using FinanceSimplify.Models.Transaction;
 using FinanceSimplify.Models.User;
 using FinanceSimplify.Services.InstallmentService;
 using FinanceSimplify.Services.CardService;
+using FinanceSimplify.Services.InvoiceService;
 using MongoDB.Driver;
 
 namespace FinanceSimplify.Services.TransactionService {
@@ -13,11 +14,13 @@ namespace FinanceSimplify.Services.TransactionService {
         private readonly MongoDbContext _context;
         private readonly IInstallmentInterface _installmentService;
         private readonly ICardInterface _cardService;
+        private readonly IInvoiceInterface _invoiceService;
 
-        public TransactionService(MongoDbContext context, IInstallmentInterface installmentService, ICardInterface cardService) {
+        public TransactionService(MongoDbContext context, IInstallmentInterface installmentService, ICardInterface cardService, IInvoiceInterface invoiceService) {
             _context = context;
             _installmentService = installmentService;
             _cardService = cardService;
+            _invoiceService = invoiceService;
         }
 
         public async Task<TransactionResponseModel<TransactionResponseDto>> CreateTransaction(Guid userId, TransactionCreateDto transactionDto) {
@@ -125,6 +128,25 @@ namespace FinanceSimplify.Services.TransactionService {
                             transactionDto.Name,
                             card.ClosingDay.Value
                         );
+
+                        // Gerar faturas automaticamente para os meses necessários
+                        var monthsToGenerate = new HashSet<(int month, int year)>();
+                        var currentDate = firstDueDate;
+                        
+                        for (int i = 0; i < transactionDto.Installments.Value; i++) {
+                            monthsToGenerate.Add((currentDate.Month, currentDate.Year));
+                            currentDate = currentDate.AddMonths(1);
+                        }
+
+                        foreach (var (month, year) in monthsToGenerate) {
+                            // Tentar gerar fatura (ignora se já existe)
+                            try {
+                                await _invoiceService.GenerateInvoiceForCard(card.Id, userId, month, year);
+                            }
+                            catch {
+                                // Fatura já existe, continuar
+                            }
+                        }
 
                         // Atualizar limite disponível
                         var newAvailableLimit = await _cardService.GetAvailableLimit(card.Id);
