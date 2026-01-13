@@ -65,6 +65,12 @@ builder.Services.AddSwaggerGen(options => {
     });
 
     options.OperationFilter<SecurityRequirementsOperationFilter>();
+    
+    // Suporte para file uploads
+    options.MapType<IFormFile>(() => new OpenApiSchema {
+        Type = "string",
+        Format = "binary"
+    });
 
 });
 

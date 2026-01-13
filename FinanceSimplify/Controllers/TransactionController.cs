@@ -80,11 +80,14 @@ namespace FinanceSimplify.Controllers {
             return Ok(response);
         }
 
+
         [Authorize]
         [HttpPost("import-csv/{userId}")]
         [Consumes("multipart/form-data")]
-        public async Task<ActionResult> ImportCsv(Guid userId, [FromForm] Guid cardId, [FromForm] IFormFile csvFile) {
-            var response = await _transactionInterface.ImportTransactionsFromCsv(userId, cardId, csvFile);
+        [RequestFormLimits(MultipartBodyLengthLimit = 10485760)] // 10MB
+        [DisableRequestSizeLimit]
+        public async Task<ActionResult> ImportCsv(Guid userId, [FromForm] CsvImportRequest request) {
+            var response = await _transactionInterface.ImportTransactionsFromCsv(userId, request.CardId, request.CsvFile);
             return Ok(response);
         }
     }
