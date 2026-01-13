@@ -125,14 +125,9 @@ namespace FinanceSimplify.Services.InstallmentService {
         }
 
         private DateTime CalculateDueDate(DateTime firstDueDate, int monthsToAdd, int closingDay) {
-            var dueDate = firstDueDate.AddMonths(monthsToAdd);
-            
-            // Se a compra foi feita após o fechamento, a primeira parcela vai para o próximo mês
-            if (DateTime.UtcNow.Day > closingDay && monthsToAdd == 0) {
-                dueDate = dueDate.AddMonths(1);
-            }
-
-            return dueDate;
+            // Simplesmente adiciona os meses à primeira data de vencimento
+            // A lógica de ajuste por fechamento já foi feita no TransactionService
+            return firstDueDate.AddMonths(monthsToAdd);
         }
     }
 }
