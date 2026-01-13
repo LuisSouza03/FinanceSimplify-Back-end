@@ -236,10 +236,15 @@ namespace FinanceSimplify.Services.CardService {
                     .Set(c => c.Name, cardUpdateDto.Name);
 
                 if (cardUpdateDto.CreditLimit.HasValue) {
-                    updateBuilder = updateBuilder.Set(c => c.CreditLimit, cardUpdateDto.CreditLimit);
-                    // Recalcular limite disponível se o limite total mudou
-                    var newAvailableLimit = await GetAvailableLimit(cardId);
-                    updateBuilder = updateBuilder.Set(c => c.AvailableLimit, newAvailableLimit);
+                    // Ajustar limite disponível baseado na diferença do limite total
+                    var currentCreditLimit = card.CreditLimit ?? 0;
+                    var currentAvailableLimit = card.AvailableLimit ?? 0;
+                    var limitDifference = cardUpdateDto.CreditLimit.Value - currentCreditLimit;
+                    var newAvailableLimit = currentAvailableLimit + limitDifference;
+
+                    updateBuilder = updateBuilder
+                        .Set(c => c.CreditLimit, cardUpdateDto.CreditLimit)
+                        .Set(c => c.AvailableLimit, newAvailableLimit);
                 }
 
                 if (cardUpdateDto.ClosingDay.HasValue) {
