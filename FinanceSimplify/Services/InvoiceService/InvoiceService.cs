@@ -72,15 +72,13 @@ namespace FinanceSimplify.Services.InvoiceService {
                     await _context.Invoices.InsertOneAsync(invoice);
                 }
 
-                // Buscar parcelas pendentes que vencem neste período e ainda não têm fatura
-                var startDate = invoice.ClosingDate.AddMonths(-1).AddDays(1);
-                var endDate = invoice.ClosingDate;
-
+                // Buscar parcelas pendentes que vencem no mês/ano desta fatura
+                // A parcela pertence à fatura se o mês/ano do vencimento da parcela corresponde ao mês/ano de referência da fatura
                 var installments = await _context.Installments
                     .Find(i => i.CardId == cardId && 
-                               i.InvoiceId == null && 
-                               i.DueDate >= startDate && 
-                               i.DueDate <= endDate)
+                               i.InvoiceId == null &&
+                               i.DueDate.Month == month &&
+                               i.DueDate.Year == year)
                     .ToListAsync();
 
                 // Atribuir parcelas à fatura
