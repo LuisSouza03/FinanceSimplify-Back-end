@@ -37,6 +37,15 @@ namespace FinanceSimplify.Services.CardService {
                     }
                 }
 
+                // Validar cor (se fornecida)
+                if (!string.IsNullOrEmpty(cardDto.Color)) {
+                    if (!System.Text.RegularExpressions.Regex.IsMatch(cardDto.Color, "^#[0-9A-Fa-f]{6}$")) {
+                        response.Message = "A cor deve estar no formato hexadecimal (#RRGGBB)!";
+                        response.Status = false;
+                        return response;
+                    }
+                }
+
                 CardModel card = new() {
                     Id = Guid.NewGuid(),
                     Name = cardDto.Name,
@@ -46,7 +55,8 @@ namespace FinanceSimplify.Services.CardService {
                     CreditLimit = cardDto.CreditLimit,
                     AvailableLimit = cardDto.CreditLimit, // Inicialmente, limite disponível = limite total
                     ClosingDay = cardDto.ClosingDay,
-                    DueDay = cardDto.DueDay
+                    DueDay = cardDto.DueDay,
+                    Color = string.IsNullOrEmpty(cardDto.Color) ? "#22C55E" : cardDto.Color // Verde padrão se não fornecido
                 };
 
                 await _context.Cards.InsertOneAsync(card);
@@ -59,7 +69,8 @@ namespace FinanceSimplify.Services.CardService {
                     CreditLimit = card.CreditLimit,
                     AvailableLimit = card.AvailableLimit,
                     ClosingDay = card.ClosingDay,
-                    DueDay = card.DueDay
+                    DueDay = card.DueDay,
+                    Color = card.Color
                 };
 
                 response.Message = "Cartão cadastrado com sucesso!";
@@ -93,7 +104,8 @@ namespace FinanceSimplify.Services.CardService {
                     CreditLimit = card.CreditLimit,
                     AvailableLimit = card.AvailableLimit,
                     ClosingDay = card.ClosingDay,
-                    DueDay = card.DueDay
+                    DueDay = card.DueDay,
+                    Color = card.Color
                 };
 
                 response.Message = "Cartão encontrado com sucesso!";

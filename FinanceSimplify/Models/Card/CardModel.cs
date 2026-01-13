@@ -36,5 +36,8 @@ namespace FinanceSimplify.Models.Card {
 
         [BsonElement("dueDay")]
         public int? DueDay { get; set; }
+
+        [BsonElement("color")]
+        public string Color { get; set; } = "#22C55E"; // Verde padrão
     }
 }
