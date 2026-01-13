@@ -14,6 +14,8 @@ namespace FinanceSimplify.Services.CardService {
 
         Task<CardResponseModel<bool>> DeleteCard(Guid userId, Guid cardId);
 
+        Task<CardResponseModel<CardResponseDto>> UpdateCard(Guid cardId, Guid userId, CardUpdateDto cardUpdateDto);
+
         Task<decimal> GetAvailableLimit(Guid cardId);
 
         Task<bool> UpdateAvailableLimit(Guid cardId, decimal newAvailableLimit);

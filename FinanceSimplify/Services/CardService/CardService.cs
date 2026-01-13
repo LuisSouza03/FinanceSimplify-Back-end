@@ -187,5 +187,98 @@ namespace FinanceSimplify.Services.CardService {
                 return false;
             }
         }
+
+        public async Task<CardResponseModel<CardResponseDto>> UpdateCard(Guid cardId, Guid userId, CardUpdateDto cardUpdateDto) {
+            CardResponseModel<CardResponseDto> response = new();
+
+            try {
+                // Buscar o cartão existente
+                var card = await _context.Cards.Find(c => c.Id == cardId && c.UserId == userId).FirstOrDefaultAsync();
+
+                if (card == null) {
+                    response.Message = "Cartão não encontrado!";
+                    response.Status = false;
+                    return response;
+                }
+
+                // Validações para cartões de crédito
+                if (card.Type == TypeCardTransactionEnum.Credito) {
+                    if (cardUpdateDto.CreditLimit.HasValue && cardUpdateDto.CreditLimit.Value <= 0) {
+                        response.Message = "O limite de crédito deve ser maior que zero!";
+                        response.Status = false;
+                        return response;
+                    }
+
+                    if (cardUpdateDto.ClosingDay.HasValue && (cardUpdateDto.ClosingDay.Value < 1 || cardUpdateDto.ClosingDay.Value > 31)) {
+                        response.Message = "O dia de fechamento deve estar entre 1 e 31!";
+                        response.Status = false;
+                        return response;
+                    }
+
+                    if (cardUpdateDto.DueDay.HasValue && (cardUpdateDto.DueDay.Value < 1 || cardUpdateDto.DueDay.Value > 31)) {
+                        response.Message = "O dia de vencimento deve estar entre 1 e 31!";
+                        response.Status = false;
+                        return response;
+                    }
+                }
+
+                // Validar cor (se fornecida)
+                if (!string.IsNullOrEmpty(cardUpdateDto.Color)) {
+                    if (!System.Text.RegularExpressions.Regex.IsMatch(cardUpdateDto.Color, "^#[0-9A-Fa-f]{6}$")) {
+                        response.Message = "A cor deve estar no formato hexadecimal (#RRGGBB)!";
+                        response.Status = false;
+                        return response;
+                    }
+                }
+
+                // Atualizar campos
+                var updateBuilder = Builders<CardModel>.Update
+                    .Set(c => c.Name, cardUpdateDto.Name);
+
+                if (cardUpdateDto.CreditLimit.HasValue) {
+                    updateBuilder = updateBuilder.Set(c => c.CreditLimit, cardUpdateDto.CreditLimit);
+                    // Recalcular limite disponível se o limite total mudou
+                    var newAvailableLimit = await GetAvailableLimit(cardId);
+                    updateBuilder = updateBuilder.Set(c => c.AvailableLimit, newAvailableLimit);
+                }
+
+                if (cardUpdateDto.ClosingDay.HasValue) {
+                    updateBuilder = updateBuilder.Set(c => c.ClosingDay, cardUpdateDto.ClosingDay);
+                }
+
+                if (cardUpdateDto.DueDay.HasValue) {
+                    updateBuilder = updateBuilder.Set(c => c.DueDay, cardUpdateDto.DueDay);
+                }
+
+                if (!string.IsNullOrEmpty(cardUpdateDto.Color)) {
+                    updateBuilder = updateBuilder.Set(c => c.Color, cardUpdateDto.Color);
+                }
+
+                await _context.Cards.UpdateOneAsync(c => c.Id == cardId, updateBuilder);
+
+                // Buscar cartão atualizado
+                var updatedCard = await _context.Cards.Find(c => c.Id == cardId).FirstOrDefaultAsync();
+
+                response.CardData = new CardResponseDto {
+                    Id = updatedCard!.Id,
+                    Name = updatedCard.Name,
+                    Type = updatedCard.Type,
+                    BankAccountId = updatedCard.BankAccountId,
+                    CreditLimit = updatedCard.CreditLimit,
+                    AvailableLimit = updatedCard.AvailableLimit,
+                    ClosingDay = updatedCard.ClosingDay,
+                    DueDay = updatedCard.DueDay,
+                    Color = updatedCard.Color
+                };
+
+                response.Message = "Cartão atualizado com sucesso!";
+                return response;
+            }
+            catch (Exception ex) {
+                response.Message = ex.Message;
+                response.Status = false;
+                return response;
+            }
+        }
     }
 }

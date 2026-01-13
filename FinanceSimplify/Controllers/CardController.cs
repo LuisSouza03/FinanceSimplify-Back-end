@@ -48,5 +48,12 @@ namespace FinanceSimplify.Controllers {
             var card = await _cardService.DeleteCard(userId, cardId);
             return Ok(card);
         }
+
+        [Authorize]
+        [HttpPut("update/{userId}/{cardId}")]
+        public async Task<ActionResult> UpdateCard(Guid userId, Guid cardId, CardUpdateDto cardUpdateDto) {
+            var response = await _cardService.UpdateCard(cardId, userId, cardUpdateDto);
+            return Ok(response);
+        }
     }
 }
