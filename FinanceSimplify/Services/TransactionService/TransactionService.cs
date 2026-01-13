@@ -4,14 +4,20 @@ using FinanceSimplify.Dtos.Transactions;
 using FinanceSimplify.Enum;
 using FinanceSimplify.Models.Transaction;
 using FinanceSimplify.Models.User;
+using FinanceSimplify.Services.InstallmentService;
+using FinanceSimplify.Services.CardService;
 using MongoDB.Driver;
 
 namespace FinanceSimplify.Services.TransactionService {
     public class TransactionService : ITransactionInterface {
         private readonly MongoDbContext _context;
+        private readonly IInstallmentInterface _installmentService;
+        private readonly ICardInterface _cardService;
 
-        public TransactionService(MongoDbContext context) {
+        public TransactionService(MongoDbContext context, IInstallmentInterface installmentService, ICardInterface cardService) {
             _context = context;
+            _installmentService = installmentService;
+            _cardService = cardService;
         }
 
         public async Task<TransactionResponseModel<TransactionResponseDto>> CreateTransaction(Guid userId, TransactionCreateDto transactionDto) {
@@ -24,6 +30,29 @@ namespace FinanceSimplify.Services.TransactionService {
                     response.Status = false;
                     response.Message = "Para pagamentos com crédito, é necessário informar o número de parcelas e um cartão.";
                     return response;
+                }
+
+                // Verificar limite disponível
+                var card = await _context.Cards.Find(c => c.Id == transactionDto.CardId).FirstOrDefaultAsync();
+                if (card == null) {
+                    response.Status = false;
+                    response.Message = "Cartão não encontrado!";
+                    return response;
+                }
+
+                if (card.Type != TypeCardTransactionEnum.Credito) {
+                    response.Status = false;
+                    response.Message = "Este cartão não é de crédito!";
+                    return response;
+                }
+
+                if (card.CreditLimit.HasValue) {
+                    var availableLimit = await _cardService.GetAvailableLimit(card.Id);
+                    if (transactionDto.Amount > availableLimit) {
+                        response.Status = false;
+                        response.Message = $"Limite insuficiente! Limite disponível: R$ {availableLimit:F2}";
+                        return response;
+                    }
                 }
             }
             else if (transactionDto.PaymentMethod == Enum.TypePaymentMethodEnum.Debito) { 
@@ -70,6 +99,38 @@ namespace FinanceSimplify.Services.TransactionService {
                 };
 
                 await _context.Transactions.InsertOneAsync(transaction);
+
+                // Se for crédito parcelado, criar as parcelas
+                if (transactionDto.PaymentMethod == TypePaymentMethodEnum.Credito && 
+                    transactionDto.Installments.HasValue && 
+                    transactionDto.Installments.Value > 0 &&
+                    transactionDto.CardId.HasValue) {
+                    
+                    var card = await _context.Cards.Find(c => c.Id == transactionDto.CardId).FirstOrDefaultAsync();
+                    if (card != null && card.DueDay.HasValue && card.ClosingDay.HasValue) {
+                        var firstDueDate = new DateTime(transactionDto.Date.Year, transactionDto.Date.Month, card.DueDay.Value);
+                        
+                        // Se já passou do vencimento deste mês, primeira parcela vence no próximo mês
+                        if (transactionDto.Date.Day > card.ClosingDay.Value) {
+                            firstDueDate = firstDueDate.AddMonths(1);
+                        }
+
+                        await _installmentService.CreateInstallmentsForTransaction(
+                            transaction.Id,
+                            transactionDto.CardId.Value,
+                            userId,
+                            transactionDto.Amount,
+                            transactionDto.Installments.Value,
+                            firstDueDate,
+                            transactionDto.Name,
+                            card.ClosingDay.Value
+                        );
+
+                        // Atualizar limite disponível
+                        var newAvailableLimit = await _cardService.GetAvailableLimit(card.Id);
+                        await _cardService.UpdateAvailableLimit(card.Id, newAvailableLimit);
+                    }
+                }
 
                 response.TransactionData = new TransactionResponseDto {
                     Id = transaction.Id,

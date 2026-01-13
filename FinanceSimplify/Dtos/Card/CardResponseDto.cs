@@ -12,5 +12,13 @@ namespace FinanceSimplify.Dtos.Card {
         public TypeCardTransactionEnum Type { get; set; }
 
         public Guid? BankAccountId { get; set; }
+
+        public decimal? CreditLimit { get; set; }
+
+        public decimal? AvailableLimit { get; set; }
+
+        public int? ClosingDay { get; set; }
+
+        public int? DueDay { get; set; }
     }
 }

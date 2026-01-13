@@ -12,5 +12,11 @@ namespace FinanceSimplify.Dtos.Card {
 
         [Required(ErrorMessage = "O campo BankAccountId é obrigatório")]
         public Guid BankAccountId { get; set; }
+
+        public decimal? CreditLimit { get; set; }
+
+        public int? ClosingDay { get; set; }
+
+        public int? DueDay { get; set; }
     }
 }

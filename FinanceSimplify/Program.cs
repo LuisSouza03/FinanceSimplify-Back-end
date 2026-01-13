@@ -6,6 +6,8 @@ using FinanceSimplify.Services.CardService;
 using FinanceSimplify.Services.Category;
 using FinanceSimplify.Services.PasswordService;
 using FinanceSimplify.Services.TransactionService;
+using FinanceSimplify.Services.InstallmentService;
+using FinanceSimplify.Services.InvoiceService;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -23,8 +25,10 @@ builder.Services.AddSwaggerGen();
 
 builder.Services.AddScoped<IAuthInterface, AuthService>();
 builder.Services.AddScoped<IPasswordInterface, PasswordService>();
-builder.Services.AddScoped<ITransactionInterface, TransactionService>();
 builder.Services.AddScoped<ICardInterface, CardService>();
+builder.Services.AddScoped<IInstallmentInterface, InstallmentService>();
+builder.Services.AddScoped<IInvoiceInterface, InvoiceService>();
+builder.Services.AddScoped<ITransactionInterface, TransactionService>();
 builder.Services.AddScoped<ICategoryInterface, CategoryService>();
 builder.Services.AddScoped<IBankAccountInterface, BankAccountService>();
 

@@ -22,5 +22,19 @@ namespace FinanceSimplify.Models.Card {
         [BsonElement("userId")]
         [BsonRepresentation(BsonType.String)]
         public Guid UserId { get; set; }
+
+        [BsonElement("creditLimit")]
+        [BsonRepresentation(BsonType.Decimal128)]
+        public decimal? CreditLimit { get; set; }
+
+        [BsonElement("availableLimit")]
+        [BsonRepresentation(BsonType.Decimal128)]
+        public decimal? AvailableLimit { get; set; }
+
+        [BsonElement("closingDay")]
+        public int? ClosingDay { get; set; }
+
+        [BsonElement("dueDay")]
+        public int? DueDay { get; set; }
     }
 }

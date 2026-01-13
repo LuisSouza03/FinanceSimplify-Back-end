@@ -1,0 +1,270 @@
+using FinanceSimplify.Data;
+using FinanceSimplify.Dtos.Installment;
+using FinanceSimplify.Dtos.Invoice;
+using FinanceSimplify.Models.Invoice;
+using FinanceSimplify.Services.InstallmentService;
+using MongoDB.Driver;
+
+namespace FinanceSimplify.Services.InvoiceService {
+    public class InvoiceService : IInvoiceInterface {
+        private readonly MongoDbContext _context;
+        private readonly IInstallmentInterface _installmentService;
+
+        public InvoiceService(MongoDbContext context, IInstallmentInterface installmentService) {
+            _context = context;
+            _installmentService = installmentService;
+        }
+
+        public async Task<InvoiceResponseModel<InvoiceResponseDto>> GenerateInvoiceForCard(Guid cardId, Guid userId, int month, int year) {
+            InvoiceResponseModel<InvoiceResponseDto> response = new();
+
+            try {
+                // Verificar se já existe fatura para este mês
+                var existingInvoice = await _context.Invoices
+                    .Find(i => i.CardId == cardId && i.ReferenceMonth == month && i.ReferenceYear == year)
+                    .FirstOrDefaultAsync();
+
+                if (existingInvoice != null) {
+                    response.Message = "Já existe uma fatura para este período!";
+                    response.Status = false;
+                    return response;
+                }
+
+                // Buscar o cartão para pegar os dias de fechamento e vencimento
+                var card = await _context.Cards.Find(c => c.Id == cardId).FirstOrDefaultAsync();
+                if (card == null) {
+                    response.Message = "Cartão não encontrado!";
+                    response.Status = false;
+                    return response;
+                }
+
+                if (!card.ClosingDay.HasValue || !card.DueDay.HasValue) {
+                    response.Message = "Cartão não possui dias de fechamento e vencimento configurados!";
+                    response.Status = false;
+                    return response;
+                }
+
+                var closingDate = new DateTime(year, month, card.ClosingDay.Value);
+                var dueDate = new DateTime(year, month, card.DueDay.Value);
+
+                // Se o vencimento é antes do fechamento, o vencimento é no próximo mês
+                if (card.DueDay.Value < card.ClosingDay.Value) {
+                    dueDate = dueDate.AddMonths(1);
+                }
+
+                var invoice = new InvoiceModel {
+                    Id = Guid.NewGuid(),
+                    CardId = cardId,
+                    UserId = userId,
+                    ReferenceMonth = month,
+                    ReferenceYear = year,
+                    ClosingDate = closingDate,
+                    DueDate = dueDate,
+                    TotalAmount = 0,
+                    IsPaid = false,
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                await _context.Invoices.InsertOneAsync(invoice);
+
+                // Buscar parcelas pendentes que vencem neste período
+                var startDate = closingDate.AddMonths(-1).AddDays(1);
+                var endDate = closingDate;
+
+                var installments = await _context.Installments
+                    .Find(i => i.CardId == cardId && 
+                               i.InvoiceId == null && 
+                               i.DueDate >= startDate && 
+                               i.DueDate <= endDate)
+                    .ToListAsync();
+
+                // Atribuir parcelas à fatura
+                foreach (var installment in installments) {
+                    await _installmentService.AssignInstallmentToInvoice(installment.Id, invoice.Id);
+                }
+
+                // Calcular total
+                var total = await CalculateInvoiceTotal(invoice.Id);
+                var update = Builders<InvoiceModel>.Update.Set(i => i.TotalAmount, total);
+                await _context.Invoices.UpdateOneAsync(i => i.Id == invoice.Id, update);
+
+                invoice.TotalAmount = total;
+
+                response.InvoiceData = new InvoiceResponseDto {
+                    Id = invoice.Id,
+                    CardId = invoice.CardId,
+                    ReferenceMonth = invoice.ReferenceMonth,
+                    ReferenceYear = invoice.ReferenceYear,
+                    ClosingDate = invoice.ClosingDate,
+                    DueDate = invoice.DueDate,
+                    TotalAmount = invoice.TotalAmount,
+                    IsPaid = invoice.IsPaid,
+                    PaidDate = invoice.PaidDate,
+                    Installments = installments.Select(i => new InstallmentResponseDto {
+                        Id = i.Id,
+                        TransactionId = i.TransactionId,
+                        CardId = i.CardId,
+                        Amount = i.Amount,
+                        InstallmentNumber = i.InstallmentNumber,
+                        TotalInstallments = i.TotalInstallments,
+                        DueDate = i.DueDate,
+                        InvoiceId = invoice.Id,
+                        IsPaid = i.IsPaid,
+                        Description = i.Description
+                    }).ToList()
+                };
+
+                response.Message = "Fatura gerada com sucesso!";
+                return response;
+            }
+            catch (Exception ex) {
+                response.Message = ex.Message;
+                response.Status = false;
+                return response;
+            }
+        }
+
+        public async Task<List<InvoiceModel>> GetInvoicesByCard(Guid cardId, int page, int pageSize) {
+            return await _context.Invoices
+                .Find(i => i.CardId == cardId)
+                .SortByDescending(i => i.ReferenceYear)
+                .ThenByDescending(i => i.ReferenceMonth)
+                .Skip((page - 1) * pageSize)
+                .Limit(pageSize)
+                .ToListAsync();
+        }
+
+        public async Task<InvoiceResponseModel<InvoiceResponseDto>> GetInvoiceById(Guid invoiceId) {
+            InvoiceResponseModel<InvoiceResponseDto> response = new();
+
+            try {
+                var invoice = await _context.Invoices.Find(i => i.Id == invoiceId).FirstOrDefaultAsync();
+
+                if (invoice == null) {
+                    response.Message = "Fatura não encontrada!";
+                    response.Status = false;
+                    return response;
+                }
+
+                var installments = await _installmentService.GetInstallmentsByInvoice(invoiceId);
+
+                response.InvoiceData = new InvoiceResponseDto {
+                    Id = invoice.Id,
+                    CardId = invoice.CardId,
+                    ReferenceMonth = invoice.ReferenceMonth,
+                    ReferenceYear = invoice.ReferenceYear,
+                    ClosingDate = invoice.ClosingDate,
+                    DueDate = invoice.DueDate,
+                    TotalAmount = invoice.TotalAmount,
+                    IsPaid = invoice.IsPaid,
+                    PaidDate = invoice.PaidDate,
+                    Installments = installments.Select(i => new InstallmentResponseDto {
+                        Id = i.Id,
+                        TransactionId = i.TransactionId,
+                        CardId = i.CardId,
+                        Amount = i.Amount,
+                        InstallmentNumber = i.InstallmentNumber,
+                        TotalInstallments = i.TotalInstallments,
+                        DueDate = i.DueDate,
+                        InvoiceId = i.InvoiceId,
+                        IsPaid = i.IsPaid,
+                        Description = i.Description
+                    }).ToList()
+                };
+
+                response.Message = "Fatura encontrada com sucesso!";
+                return response;
+            }
+            catch (Exception ex) {
+                response.Message = ex.Message;
+                response.Status = false;
+                return response;
+            }
+        }
+
+        public async Task<InvoiceResponseModel<InvoiceResponseDto>> GetCurrentInvoice(Guid cardId) {
+            InvoiceResponseModel<InvoiceResponseDto> response = new();
+
+            try {
+                var now = DateTime.UtcNow;
+                var invoice = await _context.Invoices
+                    .Find(i => i.CardId == cardId && 
+                               i.ReferenceMonth == now.Month && 
+                               i.ReferenceYear == now.Year)
+                    .FirstOrDefaultAsync();
+
+                if (invoice == null) {
+                    response.Message = "Nenhuma fatura encontrada para o mês atual!";
+                    response.Status = false;
+                    return response;
+                }
+
+                var installments = await _installmentService.GetInstallmentsByInvoice(invoice.Id);
+
+                response.InvoiceData = new InvoiceResponseDto {
+                    Id = invoice.Id,
+                    CardId = invoice.CardId,
+                    ReferenceMonth = invoice.ReferenceMonth,
+                    ReferenceYear = invoice.ReferenceYear,
+                    ClosingDate = invoice.ClosingDate,
+                    DueDate = invoice.DueDate,
+                    TotalAmount = invoice.TotalAmount,
+                    IsPaid = invoice.IsPaid,
+                    PaidDate = invoice.PaidDate,
+                    Installments = installments.Select(i => new InstallmentResponseDto {
+                        Id = i.Id,
+                        TransactionId = i.TransactionId,
+                        CardId = i.CardId,
+                        Amount = i.Amount,
+                        InstallmentNumber = i.InstallmentNumber,
+                        TotalInstallments = i.TotalInstallments,
+                        DueDate = i.DueDate,
+                        InvoiceId = i.InvoiceId,
+                        IsPaid = i.IsPaid,
+                        Description = i.Description
+                    }).ToList()
+                };
+
+                response.Message = "Fatura atual encontrada!";
+                return response;
+            }
+            catch (Exception ex) {
+                response.Message = ex.Message;
+                response.Status = false;
+                return response;
+            }
+        }
+
+        public async Task<InvoiceResponseModel<bool>> MarkInvoiceAsPaid(Guid invoiceId) {
+            InvoiceResponseModel<bool> response = new();
+
+            try {
+                var update = Builders<InvoiceModel>.Update
+                    .Set(i => i.IsPaid, true)
+                    .Set(i => i.PaidDate, DateTime.UtcNow);
+
+                var result = await _context.Invoices.UpdateOneAsync(i => i.Id == invoiceId, update);
+
+                if (result.ModifiedCount == 0) {
+                    response.Message = "Fatura não encontrada!";
+                    response.Status = false;
+                    return response;
+                }
+
+                response.InvoiceData = true;
+                response.Message = "Fatura marcada como paga!";
+                return response;
+            }
+            catch (Exception ex) {
+                response.Message = ex.Message;
+                response.Status = false;
+                return response;
+            }
+        }
+
+        public async Task<decimal> CalculateInvoiceTotal(Guid invoiceId) {
+            var installments = await _installmentService.GetInstallmentsByInvoice(invoiceId);
+            return installments.Sum(i => i.Amount);
+        }
+    }
+}
