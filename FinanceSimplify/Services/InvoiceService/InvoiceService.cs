@@ -24,52 +24,57 @@ namespace FinanceSimplify.Services.InvoiceService {
                     .Find(i => i.CardId == cardId && i.ReferenceMonth == month && i.ReferenceYear == year)
                     .FirstOrDefaultAsync();
 
+                InvoiceModel invoice;
+                bool isNewInvoice = false;
+
                 if (existingInvoice != null) {
-                    response.Message = "Já existe uma fatura para este período!";
-                    response.Status = false;
-                    return response;
+                    // Fatura já existe, vamos atualizar com novas parcelas
+                    invoice = existingInvoice;
+                } else {
+                    // Criar nova fatura
+                    isNewInvoice = true;
+
+                    // Buscar o cartão para pegar os dias de fechamento e vencimento
+                    var card = await _context.Cards.Find(c => c.Id == cardId).FirstOrDefaultAsync();
+                    if (card == null) {
+                        response.Message = "Cartão não encontrado!";
+                        response.Status = false;
+                        return response;
+                    }
+
+                    if (!card.ClosingDay.HasValue || !card.DueDay.HasValue) {
+                        response.Message = "Cartão não possui dias de fechamento e vencimento configurados!";
+                        response.Status = false;
+                        return response;
+                    }
+
+                    var closingDate = new DateTime(year, month, card.ClosingDay.Value);
+                    var dueDate = new DateTime(year, month, card.DueDay.Value);
+
+                    // Se o vencimento é antes do fechamento, o vencimento é no próximo mês
+                    if (card.DueDay.Value < card.ClosingDay.Value) {
+                        dueDate = dueDate.AddMonths(1);
+                    }
+
+                    invoice = new InvoiceModel {
+                        Id = Guid.NewGuid(),
+                        CardId = cardId,
+                        UserId = userId,
+                        ReferenceMonth = month,
+                        ReferenceYear = year,
+                        ClosingDate = closingDate,
+                        DueDate = dueDate,
+                        TotalAmount = 0,
+                        IsPaid = false,
+                        CreatedAt = DateTime.UtcNow
+                    };
+
+                    await _context.Invoices.InsertOneAsync(invoice);
                 }
 
-                // Buscar o cartão para pegar os dias de fechamento e vencimento
-                var card = await _context.Cards.Find(c => c.Id == cardId).FirstOrDefaultAsync();
-                if (card == null) {
-                    response.Message = "Cartão não encontrado!";
-                    response.Status = false;
-                    return response;
-                }
-
-                if (!card.ClosingDay.HasValue || !card.DueDay.HasValue) {
-                    response.Message = "Cartão não possui dias de fechamento e vencimento configurados!";
-                    response.Status = false;
-                    return response;
-                }
-
-                var closingDate = new DateTime(year, month, card.ClosingDay.Value);
-                var dueDate = new DateTime(year, month, card.DueDay.Value);
-
-                // Se o vencimento é antes do fechamento, o vencimento é no próximo mês
-                if (card.DueDay.Value < card.ClosingDay.Value) {
-                    dueDate = dueDate.AddMonths(1);
-                }
-
-                var invoice = new InvoiceModel {
-                    Id = Guid.NewGuid(),
-                    CardId = cardId,
-                    UserId = userId,
-                    ReferenceMonth = month,
-                    ReferenceYear = year,
-                    ClosingDate = closingDate,
-                    DueDate = dueDate,
-                    TotalAmount = 0,
-                    IsPaid = false,
-                    CreatedAt = DateTime.UtcNow
-                };
-
-                await _context.Invoices.InsertOneAsync(invoice);
-
-                // Buscar parcelas pendentes que vencem neste período
-                var startDate = closingDate.AddMonths(-1).AddDays(1);
-                var endDate = closingDate;
+                // Buscar parcelas pendentes que vencem neste período e ainda não têm fatura
+                var startDate = invoice.ClosingDate.AddMonths(-1).AddDays(1);
+                var endDate = invoice.ClosingDate;
 
                 var installments = await _context.Installments
                     .Find(i => i.CardId == cardId && 
@@ -83,12 +88,15 @@ namespace FinanceSimplify.Services.InvoiceService {
                     await _installmentService.AssignInstallmentToInvoice(installment.Id, invoice.Id);
                 }
 
-                // Calcular total
+                // Recalcular total da fatura
                 var total = await CalculateInvoiceTotal(invoice.Id);
                 var update = Builders<InvoiceModel>.Update.Set(i => i.TotalAmount, total);
                 await _context.Invoices.UpdateOneAsync(i => i.Id == invoice.Id, update);
 
                 invoice.TotalAmount = total;
+
+                // Buscar todas as parcelas da fatura para retornar
+                var allInstallments = await _installmentService.GetInstallmentsByInvoice(invoice.Id);
 
                 response.InvoiceData = new InvoiceResponseDto {
                     Id = invoice.Id,
@@ -100,7 +108,7 @@ namespace FinanceSimplify.Services.InvoiceService {
                     TotalAmount = invoice.TotalAmount,
                     IsPaid = invoice.IsPaid,
                     PaidDate = invoice.PaidDate,
-                    Installments = installments.Select(i => new InstallmentResponseDto {
+                    Installments = allInstallments.Select(i => new InstallmentResponseDto {
                         Id = i.Id,
                         TransactionId = i.TransactionId,
                         CardId = i.CardId,
@@ -114,7 +122,7 @@ namespace FinanceSimplify.Services.InvoiceService {
                     }).ToList()
                 };
 
-                response.Message = "Fatura gerada com sucesso!";
+                response.Message = isNewInvoice ? "Fatura gerada com sucesso!" : "Fatura atualizada com novas parcelas!";
                 return response;
             }
             catch (Exception ex) {
