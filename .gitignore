@@ -361,3 +361,29 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# ============================================
+# SECURITY: Sensitive Configuration Files
+# ============================================
+# Never commit files with sensitive data
+appsettings.Development.json
+appsettings.Production.json
+appsettings.Staging.json
+appsettings.Local.json
+*.Development.json
+*.Production.json
+*.Staging.json
+*.Local.json
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# API Keys and Secrets
+.secrets/
+secrets.json
+**/secrets.json
+
+# User secrets (for local development)
+**/Properties/launchSettings.json

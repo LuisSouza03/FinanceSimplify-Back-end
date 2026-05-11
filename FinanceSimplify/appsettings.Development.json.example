@@ -1,0 +1,16 @@
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "AppSettings": {
+    "Token": "YOUR_JWT_SECRET_HERE_MIN_32_CHARS"
+  },
+  "MongoDbSettings": {
+    "ConnectionString": "mongodb://localhost:27017",
+    "DatabaseName": "FinanceSimplify"
+  },
+  "AllowedHosts": "*"
+}
