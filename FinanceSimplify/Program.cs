@@ -14,6 +14,9 @@ using Microsoft.OpenApi.Models;
 using MongoDB.Driver;
 using Swashbuckle.AspNetCore.Filters;
 
+using FinanceSimplify.Services.AiService;
+using FinanceSimplify.Services.InsightService;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -31,6 +34,8 @@ builder.Services.AddScoped<IInvoiceInterface, InvoiceService>();
 builder.Services.AddScoped<ITransactionInterface, TransactionService>();
 builder.Services.AddScoped<ICategoryInterface, CategoryService>();
 builder.Services.AddScoped<IBankAccountInterface, BankAccountService>();
+builder.Services.AddHttpClient<IAiProvider, GeminiAiProvider>();
+builder.Services.AddScoped<IInsightInterface, InsightService>();
 
 // Configure MongoDB
 var mongoSettings = builder.Configuration.GetSection("MongoDbSettings").Get<MongoDbSettings>();
