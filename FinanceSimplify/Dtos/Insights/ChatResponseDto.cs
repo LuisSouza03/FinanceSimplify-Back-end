@@ -14,6 +14,7 @@ namespace FinanceSimplify.Dtos.Insights {
         public string CategoryName { get; set; } = string.Empty;
         public string Type { get; set; } = "Despesa";
         public string Status { get; set; } = "success";
+        public string ActionKind { get; set; } = "create"; // "create", "delete", "edit"
         public DateTime Date { get; set; }
     }
 }

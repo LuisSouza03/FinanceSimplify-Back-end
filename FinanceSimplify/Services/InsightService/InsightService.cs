@@ -64,6 +64,7 @@ namespace FinanceSimplify.Services.InsightService {
                 var endDate = startDate.AddMonths(1).AddTicks(-1);
 
                 var transactions = await _transactionService.GetTransactionByDateRange(userId, startDate, endDate);
+                var recentTransactions = await _transactionService.GetTransactionsByUserId(userId, 1, 25);
                 var categories = await _categoryService.GetCategoriesByUserId(userId, 1, 100);
                 var bankAccounts = await _bankAccountService.GetBankAccountsByUserId(userId, 1, 10);
 
@@ -87,9 +88,12 @@ namespace FinanceSimplify.Services.InsightService {
                 var topCategory = categoryExpenses.FirstOrDefault();
 
                 // 3. Tentar detectar intenção via Gemini (ou fallback se offline)
-                var intentResult = await ParseIntentWithAiOrFallback(request.Message, categories.Select(c => c.Name).ToList());
+                var intentResult = await ParseIntentWithAiOrFallback(
+                    request.Message,
+                    categories.Select(c => c.Name).ToList(),
+                    recentTransactions);
 
-                // 4. Se a intenção for registrar transação
+                // 4. Executar ação detectada: CRIAR, DELETAR ou EDITAR transação
                 if (intentResult.Intent == "create_transaction" && intentResult.Amount > 0) {
                     var actionDto = await ExecuteCreateTransaction(userId, intentResult, categories, bankAccounts);
                     response.Status = true;
@@ -101,6 +105,52 @@ namespace FinanceSimplify.Services.InsightService {
                         ActionDetails = actionDto
                     };
                     return response;
+                }
+
+                if (intentResult.Intent == "delete_transaction") {
+                    var actionDto = await ExecuteDeleteTransaction(intentResult, recentTransactions, categories);
+                    if (actionDto != null) {
+                        response.Status = true;
+                        response.Message = "Transação excluída com sucesso.";
+                        response.Data = new ChatResponseDto {
+                            Response = intentResult.Reply ?? $"Pronto! Excluí a transação {actionDto.Name} de {actionDto.FormattedAmount}.",
+                            IsAction = true,
+                            ActionType = "delete_transaction",
+                            ActionDetails = actionDto
+                        };
+                        return response;
+                    } else {
+                        response.Status = true;
+                        response.Message = "Transação não encontrada para exclusão.";
+                        response.Data = new ChatResponseDto {
+                            Response = "Não encontrei a transação que você deseja excluir. Poderia me confirmar o nome ou o valor exato dela?",
+                            IsAction = false
+                        };
+                        return response;
+                    }
+                }
+
+                if (intentResult.Intent == "edit_transaction") {
+                    var actionDto = await ExecuteEditTransaction(intentResult, recentTransactions, categories);
+                    if (actionDto != null) {
+                        response.Status = true;
+                        response.Message = "Transação atualizada com sucesso.";
+                        response.Data = new ChatResponseDto {
+                            Response = intentResult.Reply ?? $"Pronto! Atualizei a transação {actionDto.Name} para {actionDto.FormattedAmount}.",
+                            IsAction = true,
+                            ActionType = "edit_transaction",
+                            ActionDetails = actionDto
+                        };
+                        return response;
+                    } else {
+                        response.Status = true;
+                        response.Message = "Transação não encontrada para edição.";
+                        response.Data = new ChatResponseDto {
+                            Response = "Não encontrei a transação que você deseja alterar. Poderia me informar o nome original ou o valor dela?",
+                            IsAction = false
+                        };
+                        return response;
+                    }
                 }
 
                 // 5. Se for dúvida/conversa sobre finanças
@@ -266,43 +316,110 @@ namespace FinanceSimplify.Services.InsightService {
             return false;
         }
 
-        private async Task<IntentParseResult> ParseIntentWithAiOrFallback(string message, List<string> knownCategories) {
+        private async Task<IntentParseResult> ParseIntentWithAiOrFallback(
+            string message,
+            List<string> knownCategories,
+            List<FinanceSimplify.Models.Transaction.TransactionModel> recentTransactions) {
+
             var lower = message.ToLower();
-            var actionKeywords = new[] { "adiciona", "cria", "registra", "inserir", "gastei", "despesa", "receita", "paguei", "comprei" };
+            var actionKeywords = new[] {
+                "adiciona", "cria", "registra", "inserir", "gastei", "despesa", "receita", "paguei", "comprei",
+                "deleta", "apaga", "exclui", "remove", "cancela",
+                "muda", "altera", "edita", "troca", "atualiza"
+            };
             bool hasActionKeyword = actionKeywords.Any(k => lower.Contains(k));
 
             if (!hasActionKeyword) {
                 return new IntentParseResult { Intent = "chat" };
             }
 
-            // Se o Gemini estiver configurado, podemos pedir para extrair a intenção com rigor
+            // Se o Gemini estiver configurado, podemos pedir para interpretar intenção e alvo com precisão
             if (_aiProvider.IsConfigured) {
                 try {
                     var categoriesList = string.Join(", ", knownCategories);
-                    var prompt = $"Analise a seguinte mensagem do usuário e determine se ele quer registrar uma transação financeira:\n\"{message}\"\n\n" +
+                    var todayIso = DateTime.UtcNow.ToString("yyyy-MM-dd");
+                    var recentTxSummary = string.Join("\n", recentTransactions.Take(15).Select(t =>
+                        $"ID: {t.Id} | Nome: \"{t.Name}\" | Valor: R$ {t.Amount:N2} | Data: {t.Date:yyyy-MM-dd} | Categoria: {knownCategories.FirstOrDefault() ?? "Geral"}"));
+
+                    var prompt = $"Analise a seguinte mensagem do usuário e determine a ação financeira desejada:\n\"{message}\"\n\n" +
+                        $"Data de referência (hoje): {todayIso}.\n" +
                         $"Categorias existentes do usuário: [{categoriesList}].\n" +
+                        $"Transações recentes do usuário:\n{recentTxSummary}\n\n" +
+                        "Instruções:\n" +
+                        "- \"create_transaction\": registrar nova transação (name, amount, date, type, category, reply)\n" +
+                        "- \"delete_transaction\": excluir transação existente da lista (targetTransactionId com o ID correspondente da lista acima, name, amount, reply)\n" +
+                        "- \"edit_transaction\": alterar transação existente (targetTransactionId com o ID da transação da lista, name [novo nome ou null], amount [novo valor ou null], date [nova data ou null], category [nova categoria ou null], reply)\n" +
+                        "- \"chat\": se for dúvida ou conversa sem comando direto\n\n" +
+                        "REGRAS CRÍTICAS:\n" +
+                        "- name: OBRIGATÓRIO extrair o nome REAL do item mencionado (Ex: 'Conta Claro', 'Almoço', 'Uber', 'Mercado', 'Academia', 'Freelance Site'). NUNCA retorne 'Despesa Outros', 'Outros' ou 'Transação'!\n" +
+                        "- type: se o usuário mencionar termos de ganho/entrada ('entrada', 'receita', 'recebi', 'ganhei', 'salário', 'freelance', 'depósito', 'rendimento', 'venda'), defina OBRIGATORIAMENTE 'type': 'Receita'. Caso contrário, 'Despesa'.\n\n" +
                         "Responda SOMENTE em formato JSON com o seguinte esquema:\n" +
                         "{\n" +
-                        "  \"intent\": \"create_transaction\" ou \"chat\",\n" +
-                        "  \"name\": \"nome descritivo curto\",\n" +
+                        "  \"intent\": \"create_transaction\" ou \"delete_transaction\" ou \"edit_transaction\" ou \"chat\",\n" +
+                        "  \"targetTransactionId\": \"guid ou null\",\n" +
+                        "  \"name\": \"nome real descritivo do item\",\n" +
                         "  \"amount\": número decimal do valor,\n" +
+                        "  \"date\": \"YYYY-MM-DD ou null\",\n" +
                         "  \"type\": \"Despesa\" ou \"Receita\",\n" +
-                        "  \"category\": \"categoria que melhor se adequa\",\n" +
-                        "  \"reply\": \"resposta amigável confirmando o registro\"\n" +
+                        "  \"category\": \"categoria ou null\",\n" +
+                        "  \"reply\": \"resposta amigável confirmando a ação realizada\"\n" +
                         "}";
 
-                    var json = await _aiProvider.GenerateContentAsync(prompt, "Você é um interpretador de intenções financeiras. Retorne SOMENTE JSON válido.", jsonOutput: true);
+                    var json = await _aiProvider.GenerateContentAsync(prompt, "Você é um assistente financeiro que extrai comandos estruturados com nomes limpos. Retorne SOMENTE JSON válido.", jsonOutput: true);
                     if (!string.IsNullOrWhiteSpace(json)) {
-                        // Limpa possíveis marcações de markdown ```json
                         var cleanJson = json.Trim();
                         if (cleanJson.StartsWith("```json")) cleanJson = cleanJson[7..];
                         if (cleanJson.StartsWith("```")) cleanJson = cleanJson[3..];
                         if (cleanJson.EndsWith("```")) cleanJson = cleanJson[..^3];
                         cleanJson = cleanJson.Trim();
 
-                        var parsed = JsonSerializer.Deserialize<IntentParseResult>(cleanJson, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                        if (parsed != null && parsed.Amount > 0) {
-                            return parsed;
+                        using var doc = JsonDocument.Parse(cleanJson);
+                        var root = doc.RootElement;
+
+                        var intentType = root.TryGetProperty("intent", out var intProp) ? intProp.GetString() : "chat";
+                        if (intentType == "create_transaction" || intentType == "delete_transaction" || intentType == "edit_transaction") {
+                            decimal amount = 0;
+                            if (root.TryGetProperty("amount", out var amtProp)) {
+                                if (amtProp.ValueKind == JsonValueKind.Number) amount = amtProp.GetDecimal();
+                                else if (decimal.TryParse(amtProp.GetString()?.Replace(',', '.'), NumberStyles.Any, CultureInfo.InvariantCulture, out var parsedAmt)) amount = parsedAmt;
+                            }
+
+                            Guid? targetId = null;
+                            if (root.TryGetProperty("targetTransactionId", out var idProp) && Guid.TryParse(idProp.GetString(), out var parsedId)) {
+                                targetId = parsedId;
+                            }
+
+                            DateTime? parsedDate = null;
+                            if (root.TryGetProperty("date", out var dtProp) && !string.IsNullOrWhiteSpace(dtProp.GetString())) {
+                                if (DateTime.TryParse(dtProp.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.None, out var d)) {
+                                    parsedDate = DateTime.SpecifyKind(d, DateTimeKind.Utc);
+                                }
+                            }
+
+                            var name = root.TryGetProperty("name", out var nProp) ? nProp.GetString() : null;
+                            var type = root.TryGetProperty("type", out var tProp) ? tProp.GetString() ?? "Despesa" : "Despesa";
+                            var category = root.TryGetProperty("category", out var cProp) ? cProp.GetString() ?? "Outros" : "Outros";
+                            var reply = root.TryGetProperty("reply", out var rProp) ? rProp.GetString() : null;
+
+                            // Se o nome retornado pela IA for genérico, extrai o nome real da mensagem
+                            if (string.IsNullOrWhiteSpace(name) ||
+                                name.Equals("Transação", StringComparison.OrdinalIgnoreCase) ||
+                                name.Equals("Despesa", StringComparison.OrdinalIgnoreCase) ||
+                                name.Equals("Receita", StringComparison.OrdinalIgnoreCase) ||
+                                name.Contains("Outros", StringComparison.OrdinalIgnoreCase)) {
+                                name = ExtractCleanTransactionName(message, amount, type == "Receita", category);
+                            }
+
+                            return new IntentParseResult {
+                                Intent = intentType,
+                                TargetTransactionId = targetId,
+                                Name = name,
+                                Amount = amount,
+                                Date = parsedDate,
+                                Type = type,
+                                Category = category,
+                                Reply = reply
+                            };
                         }
                     }
                 } catch (Exception ex) {
@@ -310,55 +427,313 @@ namespace FinanceSimplify.Services.InsightService {
                 }
             }
 
-            // Fallback via regex local
-            return ParseIntentLocally(message);
+            // Fallback via regex e correspondência local
+            return ParseIntentLocally(message, recentTransactions);
         }
 
-        private IntentParseResult ParseIntentLocally(string message) {
+        private IntentParseResult ParseIntentLocally(string message, List<FinanceSimplify.Models.Transaction.TransactionModel> recentTransactions) {
             var lower = message.ToLower();
 
-            // Expressão regular para extrair valores monetários: "85", "85,50", "R$ 150.00", etc.
-            var match = Regex.Match(message, @"(?:r\$|\$)?\s*(\d+(?:[.,]\d{1,2})?)", RegexOptions.IgnoreCase);
-            if (!match.Success) {
+            // 1. Detectar intenção de DELETAR
+            var isDelete = lower.Contains("deleta") || lower.Contains("apaga") || lower.Contains("exclui") || lower.Contains("remove") || lower.Contains("cancela");
+            if (isDelete) {
+                var target = FindMatchingTransaction(message, recentTransactions);
+                if (target != null) {
+                    var formatted = target.Amount.ToString("C", new CultureInfo("pt-BR"));
+                    return new IntentParseResult {
+                        Intent = "delete_transaction",
+                        TargetTransactionId = target.Id,
+                        Name = target.Name,
+                        Amount = target.Amount,
+                        Reply = $"Pronto! Excluí a transação {target.Name} de {formatted}."
+                    };
+                }
+            }
+
+            // 2. Detectar intenção de EDITAR
+            var isEdit = lower.Contains("muda") || lower.Contains("altera") || lower.Contains("edita") || lower.Contains("troca") || lower.Contains("atualiza");
+            if (isEdit) {
+                var target = FindMatchingTransaction(message, recentTransactions);
+                if (target != null) {
+                    // Buscar novo valor especificado na mensagem (ex: "para 120" ou "120,00")
+                    var newAmount = target.Amount;
+                    var matchNumbers = Regex.Matches(message, @"(?:r\$|\$)?\s*(\d+(?:[.,]\d{1,2})?)", RegexOptions.IgnoreCase);
+                    if (matchNumbers.Count > 0) {
+                        var lastMatch = matchNumbers[^1].Groups[1].Value.Replace(',', '.');
+                        if (decimal.TryParse(lastMatch, NumberStyles.Any, CultureInfo.InvariantCulture, out var parsedVal) && parsedVal > 0) {
+                            newAmount = parsedVal;
+                        }
+                    }
+
+                    // Buscar nova data se especificada
+                    DateTime? newDate = null;
+                    var dateMatch = Regex.Match(message, @"\b(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?\b");
+                    if (dateMatch.Success) {
+                        int day = int.Parse(dateMatch.Groups[1].Value);
+                        int month = int.Parse(dateMatch.Groups[2].Value);
+                        int year = dateMatch.Groups[3].Success ? int.Parse(dateMatch.Groups[3].Value) : DateTime.UtcNow.Year;
+                        if (year < 100) year += 2000;
+                        try { newDate = DateTime.SpecifyKind(new DateTime(year, month, day), DateTimeKind.Utc); } catch { }
+                    }
+
+                    var formatted = newAmount.ToString("C", new CultureInfo("pt-BR"));
+                    return new IntentParseResult {
+                        Intent = "edit_transaction",
+                        TargetTransactionId = target.Id,
+                        Name = target.Name,
+                        Amount = newAmount,
+                        Date = newDate ?? target.Date,
+                        Reply = $"Pronto! Atualizei a transação {target.Name} para {formatted}."
+                    };
+                }
+            }
+
+            // 3. Detectar intenção de CRIAR (padrão)
+            var amountMatch = Regex.Match(message, @"(?:r\$|\$)?\s*(\d+(?:[.,]\d{1,2})?)", RegexOptions.IgnoreCase);
+            if (!amountMatch.Success) {
                 return new IntentParseResult { Intent = "chat" };
             }
 
-            var rawAmount = match.Groups[1].Value.Replace(',', '.');
+            var rawAmount = amountMatch.Groups[1].Value.Replace(',', '.');
             if (!decimal.TryParse(rawAmount, NumberStyles.Any, CultureInfo.InvariantCulture, out var amount) || amount <= 0) {
                 return new IntentParseResult { Intent = "chat" };
             }
 
-            var isIncome = lower.Contains("receita") || lower.Contains("salário") || lower.Contains("salario") || lower.Contains("recebi");
+            // Extração de data
+            DateTime txDate = DateTime.UtcNow;
+            var dtMatch = Regex.Match(message, @"\b(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?\b");
+            if (dtMatch.Success) {
+                int day = int.Parse(dtMatch.Groups[1].Value);
+                int month = int.Parse(dtMatch.Groups[2].Value);
+                int year = dtMatch.Groups[3].Success ? int.Parse(dtMatch.Groups[3].Value) : DateTime.UtcNow.Year;
+                if (year < 100) year += 2000;
+                try { txDate = DateTime.SpecifyKind(new DateTime(year, month, day), DateTimeKind.Utc); } catch { }
+            } else if (lower.Contains("ontem")) {
+                txDate = DateTime.UtcNow.AddDays(-1);
+            } else if (lower.Contains("anteontem")) {
+                txDate = DateTime.UtcNow.AddDays(-2);
+            } else if (lower.Contains("amanhã") || lower.Contains("amanha")) {
+                txDate = DateTime.UtcNow.AddDays(1);
+            }
+
+            var incomeKeywords = new[] {
+                "entrada", "entradas", "receita", "receitas", "recebi", "ganhei", "salário", "salario",
+                "depósito", "deposito", "pix recebido", "rendimento", "venda", "freelance", "freela",
+                "bônus", "bonus", "comissão", "comissao", "proventos", "lucro", "faturamento", "recebimento"
+            };
+            var isIncome = incomeKeywords.Any(k => lower.Contains(k));
             var type = isIncome ? "Receita" : "Despesa";
 
-            // Inferir categoria
-            string category = "Outros";
-            if (lower.Contains("mercado") || lower.Contains("compras")) category = "Mercado";
-            else if (lower.Contains("almoço") || lower.Contains("almoco") || lower.Contains("jantar") || lower.Contains("restaurante") || lower.Contains("comida") || lower.Contains("lanche")) category = "Alimentação";
-            else if (lower.Contains("uber") || lower.Contains("gasolina") || lower.Contains("combustível") || lower.Contains("transporte")) category = "Transporte";
-            else if (lower.Contains("farmácia") || lower.Contains("farmacia") || lower.Contains("remédio") || lower.Contains("saúde") || lower.Contains("saude")) category = "Saúde";
-            else if (lower.Contains("aluguel") || lower.Contains("condomínio") || lower.Contains("luz") || lower.Contains("energia") || lower.Contains("água")) category = "Moradia";
-            else if (lower.Contains("salário") || lower.Contains("salario") || lower.Contains("freelance")) category = "Salário";
+            // Inferir categoria inteligente
+            string category = isIncome ? "Rendimentos" : "Outros";
+            if (lower.Contains("claro") || lower.Contains("vivo") || lower.Contains("tim") || lower.Contains("internet") || lower.Contains("celular") || lower.Contains("telefone") || lower.Contains("netflix") || lower.Contains("spotify") || lower.Contains("assinatura")) category = "Assinatura";
+            else if (lower.Contains("mercado") || lower.Contains("compras") || lower.Contains("supermercado") || lower.Contains("carrefour")) category = "Mercado";
+            else if (lower.Contains("almoço") || lower.Contains("almoco") || lower.Contains("jantar") || lower.Contains("restaurante") || lower.Contains("comida") || lower.Contains("lanche") || lower.Contains("padaria") || lower.Contains("café") || lower.Contains("cafe") || lower.Contains("pizza") || lower.Contains("burger")) category = "Alimentação";
+            else if (lower.Contains("uber") || lower.Contains("gasolina") || lower.Contains("combustível") || lower.Contains("combustivel") || lower.Contains("transporte") || lower.Contains("estacionamento") || lower.Contains("pedágio") || lower.Contains("pedagio") || lower.Contains("99")) category = "Transporte";
+            else if (lower.Contains("farmácia") || lower.Contains("farmacia") || lower.Contains("remédio") || lower.Contains("remedio") || lower.Contains("saúde") || lower.Contains("saude") || lower.Contains("médico") || lower.Contains("medico") || lower.Contains("dentista") || lower.Contains("academia")) category = "Saúde";
+            else if (lower.Contains("aluguel") || lower.Contains("condomínio") || lower.Contains("condominio") || lower.Contains("luz") || lower.Contains("energia") || lower.Contains("água") || lower.Contains("agua") || lower.Contains("gás") || lower.Contains("gas") || lower.Contains("moradia")) category = "Moradia";
+            else if (lower.Contains("salário") || lower.Contains("salario") || lower.Contains("adiantamento") || lower.Contains("holerite")) category = "Salário";
+            else if (lower.Contains("freelance") || lower.Contains("freela") || lower.Contains("consultoria") || lower.Contains("bico") || lower.Contains("projeto")) category = "Freelance";
+            else if (lower.Contains("investimento") || lower.Contains("dividendos") || lower.Contains("lucro") || lower.Contains("rendimento")) category = "Investimentos";
+            else if (lower.Contains("lazer") || lower.Contains("cinema") || lower.Contains("show") || lower.Contains("viagem") || lower.Contains("hotel")) category = "Lazer";
 
-            // Inferir nome da transação
-            string name = isIncome ? $"Receita {category}" : $"Despesa {category}";
-            if (lower.Contains("uber")) name = "Uber / Transporte";
-            else if (lower.Contains("mercado")) name = "Compras de Mercado";
-            else if (lower.Contains("almoço") || lower.Contains("almoco")) name = "Almoço";
-            else if (lower.Contains("farmácia") || lower.Contains("farmacia")) name = "Farmácia";
+            // Extração do Nome Real sem "Despesa Outros"
+            string name = ExtractCleanTransactionName(message, amount, isIncome, category);
 
-            var formatted = amount.ToString("C", new CultureInfo("pt-BR"));
+            var formattedVal = amount.ToString("C", new CultureInfo("pt-BR"));
+            var formattedDate = txDate.ToString("dd/MM/yyyy");
             var reply = isIncome
-                ? $"Excelente! Registrei sua receita de {formatted} em {category}."
-                : $"Perfeito! Registrei a despesa de {formatted} em {category}.";
+                ? $"Excelente! Registrei sua receita de {formattedVal} ({name}) em {category} no dia {formattedDate}."
+                : $"Perfeito! Registrei a despesa de {formattedVal} ({name}) em {category} no dia {formattedDate}.";
 
             return new IntentParseResult {
                 Intent = "create_transaction",
                 Amount = amount,
+                Date = txDate,
                 Name = name,
                 Type = type,
                 Category = category,
                 Reply = reply
+            };
+        }
+
+        private string ExtractCleanTransactionName(string message, decimal amount, bool isIncome, string category) {
+            var text = message;
+
+            // Remove comandos e preâmbulos comuns
+            var prefixes = new[] {
+                @"^adiciona(?:r)?\s+(?:pra\s+mim\s+)?(?:uma?\s+)?(?:despesa\s+de\s+|receita\s+de\s+|entrada\s+de\s+|gasto\s+de\s+|conta\s+de\s+)?(?:o\s+|a\s+|um\s+|uma\s+)?",
+                @"^cria(?:r)?\s+(?:pra\s+mim\s+)?(?:uma?\s+)?(?:despesa\s+de\s+|receita\s+de\s+|entrada\s+de\s+)?(?:o\s+|a\s+|um\s+|uma\s+)?",
+                @"^registra(?:r)?\s+(?:pra\s+mim\s+)?(?:uma?\s+)?(?:despesa\s+de\s+|receita\s+de\s+|entrada\s+de\s+)?(?:o\s+|a\s+|um\s+|uma\s+)?",
+                @"^inseri(?:r)?\s+(?:pra\s+mim\s+)?(?:uma?\s+)?(?:despesa\s+de\s+|receita\s+de\s+|entrada\s+de\s+)?(?:o\s+|a\s+|um\s+|uma\s+)?",
+                @"^paguei\s+(?:a\s+|o\s+|um\s+|uma\s+)?",
+                @"^gastei\s+(?:com\s+|em\s+|no\s+|na\s+)?",
+                @"^recebi\s+(?:de\s+|um\s+|uma\s+)?",
+                @"^ganhei\s+(?:de\s+|um\s+|uma\s+)?"
+            };
+
+            foreach (var p in prefixes) {
+                text = Regex.Replace(text, p, "", RegexOptions.IgnoreCase).Trim();
+            }
+
+            // Remove padrões de valor monetário ("de 119,90", "com valor de 119,90", "R$ 119,90")
+            text = Regex.Replace(text, @"(?:com\s+valor\s+de|com\s+valor|valor\s+de|valor|de)?\s*(?:r\$|\$)?\s*\d+(?:[.,]\d{1,2})?\s*(?:reais|real)?", "", RegexOptions.IgnoreCase).Trim();
+
+            // Remove padrões de data ("no dia 10/10/2026", "dia 10/10", "de hoje", "hoje", etc)
+            text = Regex.Replace(text, @"(?:no\s+dia|no\s+dia\s+de|dia|data)\s*\d{1,2}/\d{1,2}(?:/\d{2,4})?", "", RegexOptions.IgnoreCase).Trim();
+            text = Regex.Replace(text, @"\b\d{1,2}/\d{1,2}(?:/\d{2,4})?\b", "", RegexOptions.IgnoreCase).Trim();
+            text = Regex.Replace(text, @"\b(?:de\s+hoje|hoje|de\s+ontem|ontem|anteontem|amanhã|amanha)\b", "", RegexOptions.IgnoreCase).Trim();
+
+            // Limpa pontuações nas bordas
+            text = Regex.Replace(text, @"^[,\.\-\s]+|[,\.\-\s]+$", "").Trim();
+
+            if (text.Length >= 2 &&
+                !text.Equals("despesa", StringComparison.OrdinalIgnoreCase) &&
+                !text.Equals("receita", StringComparison.OrdinalIgnoreCase) &&
+                !text.Equals("entrada", StringComparison.OrdinalIgnoreCase)) {
+                return CultureInfo.GetCultureInfo("pt-BR").TextInfo.ToTitleCase(text.ToLower());
+            }
+
+            if (category != "Outros" && category != "Rendimentos") {
+                return category;
+            }
+
+            return isIncome ? "Receita" : "Despesa";
+        }
+
+        private FinanceSimplify.Models.Transaction.TransactionModel? FindMatchingTransaction(
+            string message,
+            List<FinanceSimplify.Models.Transaction.TransactionModel> recentTransactions) {
+
+            if (!recentTransactions.Any()) return null;
+
+            var lower = message.ToLower();
+
+            // 1. Se pediu "última" ou "ultimo"
+            if (lower.Contains("última") || lower.Contains("ultima") || lower.Contains("último") || lower.Contains("ultimo")) {
+                return recentTransactions.OrderByDescending(t => t.Date).FirstOrDefault();
+            }
+
+            // 2. Buscar por palavra-chave no nome (ex: "claro", "uber", "almoço", "mercado")
+            var keywords = new[] { "claro", "uber", "mercado", "almoço", "almoco", "farmácia", "farmacia", "aluguel", "salário", "salario", "jantar", "gasolina" };
+            foreach (var kw in keywords) {
+                if (lower.Contains(kw)) {
+                    var match = recentTransactions.FirstOrDefault(t => t.Name.Contains(kw, StringComparison.OrdinalIgnoreCase));
+                    if (match != null) return match;
+                }
+            }
+
+            // 3. Buscar por valor monetário mencionado
+            var amountMatch = Regex.Match(message, @"(?:r\$|\$)?\s*(\d+(?:[.,]\d{1,2})?)", RegexOptions.IgnoreCase);
+            if (amountMatch.Success) {
+                var raw = amountMatch.Groups[1].Value.Replace(',', '.');
+                if (decimal.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out var val)) {
+                    var match = recentTransactions.FirstOrDefault(t => Math.Abs(t.Amount - val) < 0.05m);
+                    if (match != null) return match;
+                }
+            }
+
+            // Fallback: primeira transação mais recente
+            return recentTransactions.FirstOrDefault();
+        }
+
+        private async Task<TransactionActionDetailsDto?> ExecuteDeleteTransaction(
+            IntentParseResult intent,
+            List<FinanceSimplify.Models.Transaction.TransactionModel> recentTransactions,
+            List<FinanceSimplify.Models.Category.CategoryModel> categories) {
+
+            FinanceSimplify.Models.Transaction.TransactionModel? target = null;
+
+            if (intent.TargetTransactionId.HasValue) {
+                target = recentTransactions.FirstOrDefault(t => t.Id == intent.TargetTransactionId.Value);
+            }
+
+            if (target == null && !string.IsNullOrWhiteSpace(intent.Name)) {
+                target = recentTransactions.FirstOrDefault(t => t.Name.Contains(intent.Name, StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (target == null && intent.Amount > 0) {
+                target = recentTransactions.FirstOrDefault(t => Math.Abs(t.Amount - intent.Amount) < 0.05m);
+            }
+
+            if (target == null) return null;
+
+            var deleteResult = await _transactionService.DeleteTransaction(target.Id);
+            if (!deleteResult.Status) return null;
+
+            var catName = categories.FirstOrDefault(c => c.Id == target.CategoryId)?.Name ?? "Geral";
+
+            return new TransactionActionDetailsDto {
+                TransactionId = target.Id,
+                Name = target.Name,
+                Amount = target.Amount,
+                FormattedAmount = target.Amount.ToString("C", new CultureInfo("pt-BR")),
+                CategoryName = catName,
+                Type = target.Type == TypeTransactionEnum.Receita ? "Receita" : "Despesa",
+                ActionKind = "delete",
+                Status = "success",
+                Date = target.Date
+            };
+        }
+
+        private async Task<TransactionActionDetailsDto?> ExecuteEditTransaction(
+            IntentParseResult intent,
+            List<FinanceSimplify.Models.Transaction.TransactionModel> recentTransactions,
+            List<FinanceSimplify.Models.Category.CategoryModel> categories) {
+
+            FinanceSimplify.Models.Transaction.TransactionModel? target = null;
+
+            if (intent.TargetTransactionId.HasValue) {
+                target = recentTransactions.FirstOrDefault(t => t.Id == intent.TargetTransactionId.Value);
+            }
+
+            if (target == null && !string.IsNullOrWhiteSpace(intent.Name)) {
+                target = recentTransactions.FirstOrDefault(t => t.Name.Contains(intent.Name, StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (target == null) {
+                target = recentTransactions.FirstOrDefault();
+            }
+
+            if (target == null) return null;
+
+            var newName = !string.IsNullOrWhiteSpace(intent.Name) && intent.Name != "Transação" ? intent.Name : target.Name;
+            var newAmount = intent.Amount > 0 ? intent.Amount : target.Amount;
+            var newDate = intent.Date ?? target.Date;
+
+            Guid? targetCategoryId = target.CategoryId;
+            if (!string.IsNullOrWhiteSpace(intent.Category) && intent.Category != "Outros") {
+                var matched = categories.FirstOrDefault(c => c.Name.Equals(intent.Category, StringComparison.OrdinalIgnoreCase) || c.Name.Contains(intent.Category, StringComparison.OrdinalIgnoreCase));
+                if (matched != null) targetCategoryId = matched.Id;
+            }
+
+            var editDto = new TransactionEditDto {
+                Name = newName,
+                Amount = newAmount,
+                Date = newDate,
+                Type = target.Type,
+                PaymentMethod = target.PaymentMethod,
+                Installments = target.Installments,
+                CardId = target.CardId,
+                BankAccountId = target.BankAccountId,
+                CategoryId = targetCategoryId
+            };
+
+            var editResult = await _transactionService.EditTransaction(target.Id, editDto);
+            if (!editResult.Status) return null;
+
+            var catName = categories.FirstOrDefault(c => c.Id == targetCategoryId)?.Name ?? "Geral";
+
+            return new TransactionActionDetailsDto {
+                TransactionId = target.Id,
+                Name = newName,
+                Amount = newAmount,
+                FormattedAmount = newAmount.ToString("C", new CultureInfo("pt-BR")),
+                CategoryName = catName,
+                Type = target.Type == TypeTransactionEnum.Receita ? "Receita" : "Despesa",
+                ActionKind = "edit",
+                Status = "success",
+                Date = newDate
             };
         }
 
@@ -401,10 +776,12 @@ namespace FinanceSimplify.Services.InsightService {
                 ? TypeTransactionEnum.Receita
                 : TypeTransactionEnum.Despesa;
 
+            var transactionDate = intent.Date ?? DateTime.UtcNow;
+
             var createDto = new TransactionCreateDto {
                 Name = intent.Name ?? (typeEnum == TypeTransactionEnum.Receita ? "Receita" : "Despesa"),
                 Amount = intent.Amount,
-                Date = DateTime.UtcNow,
+                Date = transactionDate,
                 Type = typeEnum,
                 CategoryId = categoryId,
                 BankAccountId = bankAccountId,
@@ -421,7 +798,7 @@ namespace FinanceSimplify.Services.InsightService {
                 CategoryName = intent.Category ?? "Geral",
                 Type = intent.Type,
                 Status = createResult.Status ? "success" : "failed",
-                Date = DateTime.UtcNow
+                Date = transactionDate
             };
         }
 
@@ -535,8 +912,10 @@ namespace FinanceSimplify.Services.InsightService {
 
         private class IntentParseResult {
             public string Intent { get; set; } = "chat";
+            public Guid? TargetTransactionId { get; set; }
             public string? Name { get; set; }
             public decimal Amount { get; set; }
+            public DateTime? Date { get; set; }
             public string Type { get; set; } = "Despesa";
             public string Category { get; set; } = "Outros";
             public string? Reply { get; set; }
