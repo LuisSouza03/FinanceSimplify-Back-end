@@ -1,4 +1,4 @@
-﻿using FinanceSimplify.Dtos.BankAccount;
+using FinanceSimplify.Dtos.BankAccount;
 using FinanceSimplify.Models.BankAccount;
 using FinanceSimplify.Services.BankAccountService;
 using Microsoft.AspNetCore.Authorization;
@@ -39,6 +39,10 @@ namespace FinanceSimplify.Controllers {
             return Ok(bankAccount);
         }
 
-        
+        [HttpDelete("delete/{id}")]
+        public async Task<ActionResult> DeleteBankAccount(Guid id) {
+            var response = await _bankAccountService.DeleteBankAccount(id);
+            return Ok(response);
+        }
     }
 }

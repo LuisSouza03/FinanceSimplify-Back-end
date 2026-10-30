@@ -1,4 +1,4 @@
-﻿using FinanceSimplify.Dtos.BankAccount;
+using FinanceSimplify.Dtos.BankAccount;
 using FinanceSimplify.Models.BankAccount;
 
 namespace FinanceSimplify.Services.BankAccountService {
@@ -6,8 +6,7 @@ namespace FinanceSimplify.Services.BankAccountService {
 
         Task<BankAccountResponseModel<BankAccountResponseDto>> CreateBankAccount(Guid userId, BankAccountDto bankAccountDto);
         Task<List<BankAccountModel>> GetBankAccountsByUserId(Guid userId, int page = 1, int pageSize = 10);
-
         Task<BankAccountModel?> GetBankAccountById(Guid id);
-
+        Task<BankAccountResponseModel<bool>> DeleteBankAccount(Guid id);
     }
 }

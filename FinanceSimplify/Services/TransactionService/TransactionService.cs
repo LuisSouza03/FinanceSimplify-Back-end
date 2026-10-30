@@ -272,12 +272,18 @@ namespace FinanceSimplify.Services.TransactionService {
                 mongoFilter = mongoFilter & filterBuilder.Lte(t => t.Date, filter.EndDate.Value);
             }
 
-            return await _context.Transactions
+            var query = _context.Transactions
                 .Find(mongoFilter)
-                .SortByDescending(t => t.Date)
-                .Skip((page - 1) * pageSize)
-                .Limit(pageSize)
-                .ToListAsync();
+                .SortByDescending(t => t.Date);
+
+            if (pageSize > 0) {
+                return await query
+                    .Skip((Math.Max(page, 1) - 1) * pageSize)
+                    .Limit(pageSize)
+                    .ToListAsync();
+            }
+
+            return await query.ToListAsync();
         }
 
         public async Task<List<TransactionModel>> GetTransactionByDateRange(Guid userId, DateTime startDate, DateTime endDate) {

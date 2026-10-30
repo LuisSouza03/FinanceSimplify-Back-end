@@ -1,11 +1,12 @@
-﻿using FinanceSimplify.Enum;
-using System.ComponentModel.DataAnnotations;
-
 namespace FinanceSimplify.Dtos.BankAccount {
     public class BankAccountDto {
 
-        [Required(ErrorMessage = "O campo NameAccount é obrigatório")]
-        public required string NameAccount { get; set; }
+        public string? NameAccount { get; set; }
 
+        public string? AccountName { get; set; }
+
+        public string ResolvedName => !string.IsNullOrWhiteSpace(NameAccount)
+            ? NameAccount
+            : (!string.IsNullOrWhiteSpace(AccountName) ? AccountName : string.Empty);
     }
 }

@@ -1,4 +1,4 @@
-﻿using FinanceSimplify.Data;
+using FinanceSimplify.Data;
 using FinanceSimplify.Dtos.BankAccount;
 using FinanceSimplify.Models.BankAccount;
 using MongoDB.Driver;
@@ -17,8 +17,15 @@ namespace FinanceSimplify.Services.BankAccountService {
             BankAccountResponseModel<BankAccountResponseDto> response = new();
 
             try {
+                var accountName = bankAccountDto.ResolvedName;
+                if (string.IsNullOrWhiteSpace(accountName)) {
+                    response.Message = "O nome da conta bancária é obrigatório.";
+                    response.Status = false;
+                    return response;
+                }
+
                 BankAccountModel bankAccount = new() {
-                    AccountName = bankAccountDto.NameAccount,
+                    AccountName = accountName,
                     UserId = userId,
                 };
 
@@ -51,6 +58,26 @@ namespace FinanceSimplify.Services.BankAccountService {
                 .FirstOrDefaultAsync();
         }
 
-       
+        public async Task<BankAccountResponseModel<bool>> DeleteBankAccount(Guid id) {
+            BankAccountResponseModel<bool> response = new();
+
+            try {
+                var result = await _context.BankAccounts.DeleteOneAsync(b => b.Id == id);
+                if (result.DeletedCount > 0) {
+                    response.BankAccountData = true;
+                    response.Message = "Conta bancária excluída com sucesso!";
+                    response.Status = true;
+                } else {
+                    response.BankAccountData = false;
+                    response.Message = "Conta bancária não encontrada.";
+                    response.Status = false;
+                }
+                return response;
+            } catch (Exception ex) {
+                response.Message = ex.Message;
+                response.Status = false;
+                return response;
+            }
+        }
     }
 }

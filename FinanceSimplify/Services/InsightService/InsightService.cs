@@ -9,6 +9,7 @@ using FinanceSimplify.Dtos.Insights;
 using FinanceSimplify.Dtos.Transactions;
 using FinanceSimplify.Enum;
 using FinanceSimplify.Models.Insight;
+using FinanceSimplify.Models.Transaction;
 using FinanceSimplify.Services.AiService;
 using FinanceSimplify.Services.BankAccountService;
 using FinanceSimplify.Services.Category;
@@ -64,17 +65,22 @@ namespace FinanceSimplify.Services.InsightService {
                 var endDate = startDate.AddMonths(1).AddTicks(-1);
 
                 var transactions = await _transactionService.GetTransactionByDateRange(userId, startDate, endDate);
-                var recentTransactions = await _transactionService.GetTransactionsByUserId(userId, 1, 25);
+                var recentTransactions = await _transactionService.GetTransactionsByUserId(userId, 1, 100);
                 var categories = await _categoryService.GetCategoriesByUserId(userId, 1, 100);
                 var bankAccounts = await _bankAccountService.GetBankAccountsByUserId(userId, 1, 10);
 
-                var totalIncome = transactions.Where(t => t.Type == TypeTransactionEnum.Receita).Sum(t => t.Amount);
-                var totalExpense = transactions.Where(t => t.Type == TypeTransactionEnum.Despesa).Sum(t => t.Amount);
+                // Se não houver movimentações no mês corrente exato, baseia a análise em todas as transações recentes registradas
+                var analysisTransactions = (transactions != null && transactions.Count > 0)
+                    ? transactions
+                    : recentTransactions;
+
+                var totalIncome = analysisTransactions.Where(t => t.Type == TypeTransactionEnum.Receita).Sum(t => t.Amount);
+                var totalExpense = analysisTransactions.Where(t => t.Type == TypeTransactionEnum.Despesa).Sum(t => t.Amount);
                 var netSavings = totalIncome - totalExpense;
                 var savingsRate = totalIncome > 0 ? Math.Round((netSavings / totalIncome) * 100, 1) : 0;
 
                 // Agrupamento por categoria
-                var categoryExpenses = transactions
+                var categoryExpenses = analysisTransactions
                     .Where(t => t.Type == TypeTransactionEnum.Despesa && t.CategoryId.HasValue)
                     .GroupBy(t => t.CategoryId!.Value)
                     .Select(g => {
@@ -235,6 +241,9 @@ namespace FinanceSimplify.Services.InsightService {
                 var endDate = startDate.AddMonths(1).AddTicks(-1);
 
                 var transactions = await _transactionService.GetTransactionByDateRange(userId, startDate, endDate);
+                if (transactions == null || transactions.Count == 0) {
+                    transactions = await _transactionService.GetTransactionsByUserId(userId, 1, 100);
+                }
                 var totalIncome = transactions.Where(t => t.Type == TypeTransactionEnum.Receita).Sum(t => t.Amount);
                 var totalExpense = transactions.Where(t => t.Type == TypeTransactionEnum.Despesa).Sum(t => t.Amount);
                 var netSavings = totalIncome - totalExpense;
@@ -351,7 +360,7 @@ namespace FinanceSimplify.Services.InsightService {
                         "- \"edit_transaction\": alterar transação existente (targetTransactionId com o ID da transação da lista, name [novo nome ou null], amount [novo valor ou null], date [nova data ou null], category [nova categoria ou null], reply)\n" +
                         "- \"chat\": se for dúvida ou conversa sem comando direto\n\n" +
                         "REGRAS CRÍTICAS:\n" +
-                        "- name: OBRIGATÓRIO extrair o nome REAL do item mencionado (Ex: 'Conta Claro', 'Almoço', 'Uber', 'Mercado', 'Academia', 'Freelance Site'). NUNCA retorne 'Despesa Outros', 'Outros' ou 'Transação'!\n" +
+                        "- name: OBRIGATÓRIO extrair o nome REAL e conciso do item mencionado (Ex: 'Claro', 'Almoço', 'Uber', 'Mercado', 'Academia', 'Freelance Site'). NUNCA inclua prefixos como 'Cadastra', 'Adiciona', 'Despesa', 'No Valor De', etc. NUNCA retorne 'Despesa Outros', 'Outros' ou 'Transação'!\n" +
                         "- type: se o usuário mencionar termos de ganho/entrada ('entrada', 'receita', 'recebi', 'ganhei', 'salário', 'freelance', 'depósito', 'rendimento', 'venda'), defina OBRIGATORIAMENTE 'type': 'Receita'. Caso contrário, 'Despesa'.\n\n" +
                         "Responda SOMENTE em formato JSON com o seguinte esquema:\n" +
                         "{\n" +
@@ -401,12 +410,19 @@ namespace FinanceSimplify.Services.InsightService {
                             var category = root.TryGetProperty("category", out var cProp) ? cProp.GetString() ?? "Outros" : "Outros";
                             var reply = root.TryGetProperty("reply", out var rProp) ? rProp.GetString() : null;
 
-                            // Se o nome retornado pela IA for genérico, extrai o nome real da mensagem
+                            // Se o nome retornado pela IA for genérico ou contiver prefixos residuais de comando, extrai o nome real da mensagem
                             if (string.IsNullOrWhiteSpace(name) ||
                                 name.Equals("Transação", StringComparison.OrdinalIgnoreCase) ||
                                 name.Equals("Despesa", StringComparison.OrdinalIgnoreCase) ||
                                 name.Equals("Receita", StringComparison.OrdinalIgnoreCase) ||
-                                name.Contains("Outros", StringComparison.OrdinalIgnoreCase)) {
+                                name.Contains("Outros", StringComparison.OrdinalIgnoreCase) ||
+                                name.StartsWith("cadastra", StringComparison.OrdinalIgnoreCase) ||
+                                name.StartsWith("adiciona", StringComparison.OrdinalIgnoreCase) ||
+                                name.StartsWith("cria", StringComparison.OrdinalIgnoreCase) ||
+                                name.StartsWith("registra", StringComparison.OrdinalIgnoreCase) ||
+                                name.StartsWith("insere", StringComparison.OrdinalIgnoreCase) ||
+                                name.StartsWith("lanca", StringComparison.OrdinalIgnoreCase) ||
+                                name.StartsWith("lança", StringComparison.OrdinalIgnoreCase)) {
                                 name = ExtractCleanTransactionName(message, amount, type == "Receita", category);
                             }
 
@@ -560,32 +576,37 @@ namespace FinanceSimplify.Services.InsightService {
         private string ExtractCleanTransactionName(string message, decimal amount, bool isIncome, string category) {
             var text = message;
 
-            // Remove comandos e preâmbulos comuns
-            var prefixes = new[] {
-                @"^adiciona(?:r)?\s+(?:pra\s+mim\s+)?(?:uma?\s+)?(?:despesa\s+de\s+|receita\s+de\s+|entrada\s+de\s+|gasto\s+de\s+|conta\s+de\s+)?(?:o\s+|a\s+|um\s+|uma\s+)?",
-                @"^cria(?:r)?\s+(?:pra\s+mim\s+)?(?:uma?\s+)?(?:despesa\s+de\s+|receita\s+de\s+|entrada\s+de\s+)?(?:o\s+|a\s+|um\s+|uma\s+)?",
-                @"^registra(?:r)?\s+(?:pra\s+mim\s+)?(?:uma?\s+)?(?:despesa\s+de\s+|receita\s+de\s+|entrada\s+de\s+)?(?:o\s+|a\s+|um\s+|uma\s+)?",
-                @"^inseri(?:r)?\s+(?:pra\s+mim\s+)?(?:uma?\s+)?(?:despesa\s+de\s+|receita\s+de\s+|entrada\s+de\s+)?(?:o\s+|a\s+|um\s+|uma\s+)?",
-                @"^paguei\s+(?:a\s+|o\s+|um\s+|uma\s+)?",
-                @"^gastei\s+(?:com\s+|em\s+|no\s+|na\s+)?",
-                @"^recebi\s+(?:de\s+|um\s+|uma\s+)?",
-                @"^ganhei\s+(?:de\s+|um\s+|uma\s+)?"
-            };
+            // 1. Saudação inicial
+            text = Regex.Replace(text, @"^(?:por\s+favor\s*,?\s*|pfv\s*,?\s*|opa\s*,?\s*|olá\s*,?\s*|ola\s*,?\s*|ei\s*,?\s*|oi\s*,?\s*)", "", RegexOptions.IgnoreCase);
 
-            foreach (var p in prefixes) {
-                text = Regex.Replace(text, p, "", RegexOptions.IgnoreCase).Trim();
-            }
+            // 2. Verbo de ação inicial
+            text = Regex.Replace(text, @"^(?:cadastra(?:r)?|cadastre|adiciona(?:r)?|adicione|cria(?:r)?|crie|registra(?:r)?|registre|insere|inseri(?:r)?|lança(?:r)?|lanca(?:r)?|lance|coloca(?:r)?|coloque|bota(?:r)?|bote|anota(?:r)?|anote|paguei|comprei|gastei|recebi|ganhei)\b\s*", "", RegexOptions.IgnoreCase);
 
-            // Remove padrões de valor monetário ("de 119,90", "com valor de 119,90", "R$ 119,90")
-            text = Regex.Replace(text, @"(?:com\s+valor\s+de|com\s+valor|valor\s+de|valor|de)?\s*(?:r\$|\$)?\s*\d+(?:[.,]\d{1,2})?\s*(?:reais|real)?", "", RegexOptions.IgnoreCase).Trim();
+            // 3. Remover valores monetários (com preposições antes/depois)
+            text = Regex.Replace(text, @"(?:no\s+valor\s+de|no\s+valor|com\s+valor\s+de|com\s+valor|valor\s+de|valor|no\s+total\s+de|no\s+total|total\s+de|total|por|de)?\s*(?:r\$|\$)?\s*\d+(?:[.,]\d{1,2})?\s*(?:reais|real)?", " ", RegexOptions.IgnoreCase);
 
-            // Remove padrões de data ("no dia 10/10/2026", "dia 10/10", "de hoje", "hoje", etc)
-            text = Regex.Replace(text, @"(?:no\s+dia|no\s+dia\s+de|dia|data)\s*\d{1,2}/\d{1,2}(?:/\d{2,4})?", "", RegexOptions.IgnoreCase).Trim();
-            text = Regex.Replace(text, @"\b\d{1,2}/\d{1,2}(?:/\d{2,4})?\b", "", RegexOptions.IgnoreCase).Trim();
-            text = Regex.Replace(text, @"\b(?:de\s+hoje|hoje|de\s+ontem|ontem|anteontem|amanhã|amanha)\b", "", RegexOptions.IgnoreCase).Trim();
+            // 4. Remover datas
+            text = Regex.Replace(text, @"(?:no\s+dia|no\s+dia\s+de|dia|data)\s*\d{1,2}/\d{1,2}(?:/\d{2,4})?", " ", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"\b\d{1,2}/\d{1,2}(?:/\d{2,4})?\b", " ", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"\b(?:de\s+hoje|hoje|de\s+ontem|ontem|anteontem|amanhã|amanha)\b", " ", RegexOptions.IgnoreCase);
 
-            // Limpa pontuações nas bordas
+            // 5. Remover pronomes / preenchimentos ('pra mim', 'para mim', 'aí', etc)
+            text = Regex.Replace(text, @"\b(?:pra\s+mim|para\s+mim|aí|ai)\b", " ", RegexOptions.IgnoreCase);
+
+            // 6. Remover termos de transação genéricos ('uma despesa', 'a despesa', 'uma receita', 'conta', etc)
+            text = Regex.Replace(text, @"\b(?:uma?\s+nova|um\s+novo|uma?|o|a|os|as)\s+(?:despesa|receita|entrada|gasto|conta|pagamento|transação|transacao)\b", " ", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"\b(?:despesa|receita|entrada|gasto|conta|pagamento|transação|transacao)\b", " ", RegexOptions.IgnoreCase);
+
+            // 7. Remover conectivos e preposições isoladas no início ou fim
+            text = text.Trim();
+            text = Regex.Replace(text, @"^(?:de|da|do|em|no|na|com|para|pra|por)\s+", "", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"\s+(?:de|da|do|em|no|na|com|para|pra|por)$", "", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"^(?:de|da|do|em|no|na|com|para|pra|por)\s+", "", RegexOptions.IgnoreCase);
+            text = Regex.Replace(text, @"\s+(?:de|da|do|em|no|na|com|para|pra|por)$", "", RegexOptions.IgnoreCase);
+
+            // 8. Limpa pontuações nas bordas e espaços múltiplos
             text = Regex.Replace(text, @"^[,\.\-\s]+|[,\.\-\s]+$", "").Trim();
+            text = Regex.Replace(text, @"\s+", " ").Trim();
 
             if (text.Length >= 2 &&
                 !text.Equals("despesa", StringComparison.OrdinalIgnoreCase) &&
