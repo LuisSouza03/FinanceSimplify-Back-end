@@ -23,5 +23,6 @@ namespace FinanceSimplify.Data {
         public IMongoCollection<InstallmentModel> Installments => _database.GetCollection<InstallmentModel>("Installments");
         public IMongoCollection<InvoiceModel> Invoices => _database.GetCollection<InvoiceModel>("Invoices");
         public IMongoCollection<FinanceSimplify.Models.Insight.InsightCacheModel> Insights => _database.GetCollection<FinanceSimplify.Models.Insight.InsightCacheModel>("Insights");
+        public IMongoCollection<FinanceSimplify.Models.Investment.InvestmentModel> Investments => _database.GetCollection<FinanceSimplify.Models.Investment.InvestmentModel>("Investments");
     }
 }

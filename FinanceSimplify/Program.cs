@@ -36,6 +36,7 @@ builder.Services.AddScoped<ICategoryInterface, CategoryService>();
 builder.Services.AddScoped<IBankAccountInterface, BankAccountService>();
 builder.Services.AddHttpClient<IAiProvider, GeminiAiProvider>();
 builder.Services.AddScoped<IInsightInterface, InsightService>();
+builder.Services.AddHttpClient<FinanceSimplify.Services.InvestmentService.IInvestmentInterface, FinanceSimplify.Services.InvestmentService.InvestmentService>();
 
 // Configure MongoDB
 var mongoSettings = builder.Configuration.GetSection("MongoDbSettings").Get<MongoDbSettings>();
