@@ -1,4 +1,4 @@
-﻿using FinanceSimplify.Enum;
+using FinanceSimplify.Enum;
 using FinanceSimplify.Models.Transaction;
 using System.ComponentModel.DataAnnotations;
 
@@ -26,6 +26,7 @@ namespace FinanceSimplify.Dtos.Transactions {
         public Guid? CategoryId { get; set; }
 
         public Guid? BankAccountId { get; set; }
+        public Guid? InvoiceId { get; set; }
 
     }
 }

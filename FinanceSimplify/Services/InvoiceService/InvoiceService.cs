@@ -19,7 +19,7 @@ namespace FinanceSimplify.Services.InvoiceService {
             InvoiceResponseModel<InvoiceResponseDto> response = new();
 
             try {
-                // Verificar se já existe fatura para este mês
+                // Verificar se jÃ¡ existe fatura para este mÃªs
                 var existingInvoice = await _context.Invoices
                     .Find(i => i.CardId == cardId && i.ReferenceMonth == month && i.ReferenceYear == year)
                     .FirstOrDefaultAsync();
@@ -28,22 +28,22 @@ namespace FinanceSimplify.Services.InvoiceService {
                 bool isNewInvoice = false;
 
                 if (existingInvoice != null) {
-                    // Fatura já existe, vamos atualizar com novas parcelas
+                    // Fatura jÃ¡ existe, vamos atualizar com novas parcelas
                     invoice = existingInvoice;
                 } else {
                     // Criar nova fatura
                     isNewInvoice = true;
 
-                    // Buscar o cartão para pegar os dias de fechamento e vencimento
+                    // Buscar o cartÃ£o para pegar os dias de fechamento e vencimento
                     var card = await _context.Cards.Find(c => c.Id == cardId).FirstOrDefaultAsync();
                     if (card == null) {
-                        response.Message = "Cartão não encontrado!";
+                        response.Message = "CartÃ£o nÃ£o encontrado!";
                         response.Status = false;
                         return response;
                     }
 
                     if (!card.ClosingDay.HasValue || !card.DueDay.HasValue) {
-                        response.Message = "Cartão não possui dias de fechamento e vencimento configurados!";
+                        response.Message = "CartÃ£o nÃ£o possui dias de fechamento e vencimento configurados!";
                         response.Status = false;
                         return response;
                     }
@@ -51,7 +51,7 @@ namespace FinanceSimplify.Services.InvoiceService {
                     var closingDate = new DateTime(year, month, card.ClosingDay.Value);
                     var dueDate = new DateTime(year, month, card.DueDay.Value);
 
-                    // Se o vencimento é antes do fechamento, o vencimento é no próximo mês
+                    // Se o vencimento Ã© antes do fechamento, o vencimento Ã© no prÃ³ximo mÃªs
                     if (card.DueDay.Value < card.ClosingDay.Value) {
                         dueDate = dueDate.AddMonths(1);
                     }
@@ -72,8 +72,8 @@ namespace FinanceSimplify.Services.InvoiceService {
                     await _context.Invoices.InsertOneAsync(invoice);
                 }
 
-                // Buscar parcelas pendentes que vencem no mês/ano desta fatura
-                // A parcela pertence à fatura se o mês/ano do vencimento da parcela corresponde ao mês/ano de referência da fatura
+                // Buscar parcelas pendentes que vencem no mÃªs/ano desta fatura
+                // A parcela pertence Ã  fatura se o mÃªs/ano do vencimento da parcela corresponde ao mÃªs/ano de referÃªncia da fatura
                 var installments = await _context.Installments
                     .Find(i => i.CardId == cardId && 
                                i.InvoiceId == null &&
@@ -81,7 +81,7 @@ namespace FinanceSimplify.Services.InvoiceService {
                                i.DueDate.Year == year)
                     .ToListAsync();
 
-                // Atribuir parcelas à fatura
+                // Atribuir parcelas Ã  fatura
                 foreach (var installment in installments) {
                     await _installmentService.AssignInstallmentToInvoice(installment.Id, invoice.Id);
                 }
@@ -92,6 +92,7 @@ namespace FinanceSimplify.Services.InvoiceService {
                 await _context.Invoices.UpdateOneAsync(i => i.Id == invoice.Id, update);
 
                 invoice.TotalAmount = total;
+                await SyncInvoiceTransaction(invoice.Id);
 
                 // Buscar todas as parcelas da fatura para retornar
                 var allInstallments = await _installmentService.GetInstallmentsByInvoice(invoice.Id);
@@ -147,7 +148,7 @@ namespace FinanceSimplify.Services.InvoiceService {
                 var invoice = await _context.Invoices.Find(i => i.Id == invoiceId).FirstOrDefaultAsync();
 
                 if (invoice == null) {
-                    response.Message = "Fatura não encontrada!";
+                    response.Message = "Fatura nÃ£o encontrada!";
                     response.Status = false;
                     return response;
                 }
@@ -200,7 +201,7 @@ namespace FinanceSimplify.Services.InvoiceService {
                     .FirstOrDefaultAsync();
 
                 if (invoice == null) {
-                    response.Message = "Nenhuma fatura encontrada para o mês atual!";
+                    response.Message = "Nenhuma fatura encontrada para o mÃªs atual!";
                     response.Status = false;
                     return response;
                 }
@@ -249,7 +250,7 @@ namespace FinanceSimplify.Services.InvoiceService {
                 var invoice = await _context.Invoices.Find(i => i.Id == invoiceId).FirstOrDefaultAsync();
                 
                 if (invoice == null) {
-                    response.Message = "Fatura não encontrada!";
+                    response.Message = "Fatura nÃ£o encontrada!";
                     response.Status = false;
                     return response;
                 }
@@ -275,10 +276,10 @@ namespace FinanceSimplify.Services.InvoiceService {
                     );
                 }
 
-                // Recalcular e atualizar o limite disponível do cartão
+                // Recalcular e atualizar o limite disponÃ­vel do cartÃ£o
                 var card = await _context.Cards.Find(c => c.Id == invoice.CardId).FirstOrDefaultAsync();
                 if (card != null && card.CreditLimit.HasValue) {
-                    // Buscar todas as parcelas pendentes (não pagas) do cartão
+                    // Buscar todas as parcelas pendentes (nÃ£o pagas) do cartÃ£o
                     var pendingInstallments = await _context.Installments
                         .Find(i => i.CardId == invoice.CardId && !i.IsPaid)
                         .ToListAsync();
@@ -293,7 +294,7 @@ namespace FinanceSimplify.Services.InvoiceService {
                 }
 
                 response.InvoiceData = true;
-                response.Message = "Fatura marcada como paga e limite do cartão atualizado!";
+                response.Message = "Fatura marcada como paga e limite do cartÃ£o atualizado!";
                 return response;
             }
             catch (Exception ex) {
@@ -306,6 +307,73 @@ namespace FinanceSimplify.Services.InvoiceService {
         public async Task<decimal> CalculateInvoiceTotal(Guid invoiceId) {
             var installments = await _installmentService.GetInstallmentsByInvoice(invoiceId);
             return installments.Sum(i => i.Amount);
+        }
+
+        public async Task SyncInvoiceTransaction(Guid invoiceId) {
+            try {
+                var invoice = await _context.Invoices.Find(i => i.Id == invoiceId).FirstOrDefaultAsync();
+                if (invoice == null) return;
+
+                var card = await _context.Cards.Find(c => c.Id == invoice.CardId).FirstOrDefaultAsync();
+                var cardName = card?.Name ?? "Cartão";
+
+                var invoiceTransaction = await _context.Transactions
+                    .Find(t => t.InvoiceId == invoice.Id)
+                    .FirstOrDefaultAsync();
+
+                if (invoice.TotalAmount <= 0) {
+                    if (invoiceTransaction != null) {
+                        await _context.Transactions.DeleteOneAsync(t => t.Id == invoiceTransaction.Id);
+                    }
+                    return;
+                }
+
+                if (invoiceTransaction == null) {
+                    invoiceTransaction = new Models.Transaction.TransactionModel {
+                        Id = Guid.NewGuid(),
+                        Name = $"Fatura - {cardName}",
+                        Amount = invoice.TotalAmount,
+                        Date = invoice.DueDate,
+                        Type = Enum.TypeTransactionEnum.Despesa,
+                        PaymentMethod = Enum.TypePaymentMethodEnum.Credito,
+                        CardId = invoice.CardId,
+                        BankAccountId = card?.BankAccountId,
+                        UserId = invoice.UserId,
+                        InvoiceId = invoice.Id
+                    };
+                    await _context.Transactions.InsertOneAsync(invoiceTransaction);
+                } else {
+                    var update = Builders<Models.Transaction.TransactionModel>.Update
+                        .Set(t => t.Name, $"Fatura - {cardName}")
+                        .Set(t => t.Amount, invoice.TotalAmount)
+                        .Set(t => t.Date, invoice.DueDate)
+                        .Set(t => t.BankAccountId, card?.BankAccountId);
+                    await _context.Transactions.UpdateOneAsync(t => t.Id == invoiceTransaction.Id, update);
+                }
+            }
+            catch {
+                // Silently continue if non-critical sync issue
+            }
+        }
+
+        public async Task SyncAllInvoicesForUser(Guid userId) {
+            try {
+                var invoices = await _context.Invoices.Find(i => i.UserId == userId).ToListAsync();
+                foreach (var invoice in invoices) {
+                    var total = await CalculateInvoiceTotal(invoice.Id);
+                    if (total != invoice.TotalAmount) {
+                        invoice.TotalAmount = total;
+                        await _context.Invoices.UpdateOneAsync(
+                            i => i.Id == invoice.Id,
+                            Builders<InvoiceModel>.Update.Set(i => i.TotalAmount, total)
+                        );
+                    }
+                    await SyncInvoiceTransaction(invoice.Id);
+                }
+            }
+            catch {
+                // Silently continue
+            }
         }
     }
 }

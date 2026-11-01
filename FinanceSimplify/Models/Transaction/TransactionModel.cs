@@ -1,4 +1,4 @@
-﻿using FinanceSimplify.Enum;
+using FinanceSimplify.Enum;
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
 
@@ -43,5 +43,9 @@ namespace FinanceSimplify.Models.Transaction {
         [BsonElement("categoryId")]
         [BsonRepresentation(BsonType.String)]
         public Guid? CategoryId { get; set; }
+
+        [BsonElement("invoiceId")]
+        [BsonRepresentation(BsonType.String)]
+        public Guid? InvoiceId { get; set; }
     }
 }

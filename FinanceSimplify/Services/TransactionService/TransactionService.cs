@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using FinanceSimplify.Data;
 using FinanceSimplify.Dtos.Transactions;
 using FinanceSimplify.Enum;
@@ -260,9 +260,11 @@ namespace FinanceSimplify.Services.TransactionService {
         }
 
         public async Task<List<TransactionModel>> GetTransactionsByUserId(Guid userId, int page, int pageSize, TransactionFilterDto? filter = null) {
+            await _invoiceService.SyncAllInvoicesForUser(userId);
 
             var filterBuilder = Builders<TransactionModel>.Filter;
-            var mongoFilter = filterBuilder.Eq(t => t.UserId, userId);
+            var mongoFilter = filterBuilder.Eq(t => t.UserId, userId) &
+                (filterBuilder.Ne(t => t.PaymentMethod, TypePaymentMethodEnum.Credito) | filterBuilder.Ne(t => t.InvoiceId, null));
 
             if(filter?.StartDate.HasValue == true) {
                 mongoFilter = mongoFilter & filterBuilder.Gte(t => t.Date, filter.StartDate.Value);
@@ -287,9 +289,11 @@ namespace FinanceSimplify.Services.TransactionService {
         }
 
         public async Task<List<TransactionModel>> GetTransactionByDateRange(Guid userId, DateTime startDate, DateTime endDate) {
-            
+            await _invoiceService.SyncAllInvoicesForUser(userId);
+
             var filterBuilder = Builders<TransactionModel>.Filter;
             var filter = filterBuilder.Eq(t => t.UserId, userId) &
+                        (filterBuilder.Ne(t => t.PaymentMethod, TypePaymentMethodEnum.Credito) | filterBuilder.Ne(t => t.InvoiceId, null)) &
                         filterBuilder.Gte(t => t.Date, startDate) &
                         filterBuilder.Lte(t => t.Date, endDate);
             
@@ -315,6 +319,12 @@ namespace FinanceSimplify.Services.TransactionService {
                     return response;
                 }
 
+                if (transaction.InvoiceId.HasValue) {
+                    response.Message = "Esta transação é uma fatura consolidada gerada pelas compras do cartão. Para alterá-la, gerencie os lançamentos do cartão.";
+                    response.Status = false;
+                    return response;
+                }
+
                 // Buscar parcelas associadas a esta transação
                 var installments = await _installmentService.GetInstallmentsByTransaction(transactionId);
 
@@ -331,11 +341,12 @@ namespace FinanceSimplify.Services.TransactionService {
                 // Deletar a transação
                 await _context.Transactions.DeleteOneAsync(t => t.Id == transactionId);
 
-                // Recalcular total das faturas afetadas
+                // Recalcular total das faturas afetadas e sincronizar transação da fatura
                 foreach (var invoiceId in affectedInvoiceIds) {
                     var total = await _invoiceService.CalculateInvoiceTotal(invoiceId);
                     var update = Builders<Models.Invoice.InvoiceModel>.Update.Set(i => i.TotalAmount, total);
                     await _context.Invoices.UpdateOneAsync(i => i.Id == invoiceId, update);
+                    await _invoiceService.SyncInvoiceTransaction(invoiceId);
                 }
 
                 // Se a transação tinha cartão, recalcular o limite disponível
@@ -365,6 +376,12 @@ namespace FinanceSimplify.Services.TransactionService {
 
                 if (transaction == null) {
                     response.Message = "Nenhuma transaction localizada!";
+                    response.Status = false;
+                    return response;
+                }
+
+                if (transaction.InvoiceId.HasValue) {
+                    response.Message = "Esta transação é uma fatura consolidada gerada pelas compras do cartão. Para alterá-la, gerencie as compras do cartão.";
                     response.Status = false;
                     return response;
                 }

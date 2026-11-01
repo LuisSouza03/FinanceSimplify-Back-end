@@ -1,4 +1,4 @@
-﻿using FinanceSimplify.Data;
+using FinanceSimplify.Data;
 using FinanceSimplify.Dtos.Category;
 using FinanceSimplify.Models.Category;
 using MongoDB.Driver;
@@ -31,7 +31,6 @@ namespace FinanceSimplify.Services.Category {
                 response.Message = "Categoria criada com sucesso!";
                 return response;
 
-
             }
             catch (Exception ex) {
                 response.Message = ex.Message;
@@ -41,12 +40,40 @@ namespace FinanceSimplify.Services.Category {
         }
 
         public async Task<List<CategoryModel>> GetCategoriesByUserId(Guid userId, int page, int pageSize) {
+            var query = _context.Categories.Find(c => c.UserId == userId);
 
-            return await _context.Categories
-                .Find(c => c.UserId ==  userId)
-                .Skip((page - 1) * pageSize)
-                .Limit(pageSize)
-                .ToListAsync();
+            if (pageSize > 0) {
+                query = query.Skip((page - 1) * pageSize).Limit(pageSize);
+            }
+
+            return await query.ToListAsync();
+        }
+
+        public async Task<CategoryResponseModel<CategoryResponseDto>> EditCategory(Guid userId, Guid categoryId, CategoryDto categoryDto) {
+            CategoryResponseModel<CategoryResponseDto> response = new();
+
+            try {
+                var update = Builders<CategoryModel>.Update.Set(c => c.Name, categoryDto.Name);
+                var result = await _context.Categories.UpdateOneAsync(c => c.Id == categoryId && c.UserId == userId, update);
+
+                if (result.MatchedCount == 0) {
+                    response.Message = "Categoria não encontrada";
+                    response.Status = false;
+                    return response;
+                }
+
+                response.CategoryData = new CategoryResponseDto {
+                    Id = categoryId,
+                    Name = categoryDto.Name
+                };
+                response.Message = "Categoria atualizada com sucesso!";
+                return response;
+            }
+            catch (Exception ex) {
+                response.Message = ex.Message;
+                response.Status = false;
+                return response;
+            }
         }
 
         public async Task<CategoryResponseModel<bool>> DeleteCategory(Guid UserId, Guid categoryId) {
@@ -64,6 +91,7 @@ namespace FinanceSimplify.Services.Category {
                 response.CategoryData = true;
                 response.Message = "Categoria removida com sucesso!";
                 return response;
+
             }
             catch (Exception ex) {
                 response.Message = ex.Message;
@@ -77,6 +105,5 @@ namespace FinanceSimplify.Services.Category {
                 .Find(c => c.UserId == userId && c.Name.ToLower() == categoryName.ToLower())
                 .FirstOrDefaultAsync();
         }
-
     }
 }

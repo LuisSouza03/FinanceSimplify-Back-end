@@ -1,4 +1,4 @@
-﻿using FinanceSimplify.Dtos.Category;
+using FinanceSimplify.Dtos.Category;
 using FinanceSimplify.Services.Category;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -24,8 +24,15 @@ namespace FinanceSimplify.Controllers {
 
         [Authorize]
         [HttpGet("byUser/{userId}")]
-        public async Task<ActionResult> GetCategoriesByUserId(Guid userId, int page = 1, int pageSize = 10) {
+        public async Task<ActionResult> GetCategoriesByUserId(Guid userId, int page = 1, int pageSize = 1000) {
             var response = await _categoryService.GetCategoriesByUserId(userId, page, pageSize);
+            return Ok(response);
+        }
+
+        [Authorize]
+        [HttpPut("update/{userId}/{categoryId}")]
+        public async Task<ActionResult> EditCategory(Guid userId, Guid categoryId, [FromBody] CategoryDto categoryDto) {
+            var response = await _categoryService.EditCategory(userId, categoryId, categoryDto);
             return Ok(response);
         }
 

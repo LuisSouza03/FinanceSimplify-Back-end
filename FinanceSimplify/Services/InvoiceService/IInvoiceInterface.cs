@@ -9,5 +9,7 @@ namespace FinanceSimplify.Services.InvoiceService {
         Task<InvoiceResponseModel<InvoiceResponseDto>> GetCurrentInvoice(Guid cardId);
         Task<InvoiceResponseModel<bool>> MarkInvoiceAsPaid(Guid invoiceId);
         Task<decimal> CalculateInvoiceTotal(Guid invoiceId);
+        Task SyncInvoiceTransaction(Guid invoiceId);
+        Task SyncAllInvoicesForUser(Guid userId);
     }
 }

@@ -1,4 +1,4 @@
-﻿using FinanceSimplify.Dtos.Category;
+using FinanceSimplify.Dtos.Category;
 using FinanceSimplify.Models.Category;
 
 namespace FinanceSimplify.Services.Category {
@@ -7,6 +7,8 @@ namespace FinanceSimplify.Services.Category {
         Task<CategoryResponseModel<CategoryResponseDto>> CreateCategory(Guid userId, CategoryDto categoryDto);
 
         Task<List<CategoryModel>> GetCategoriesByUserId(Guid userId, int page, int pageSize);
+
+        Task<CategoryResponseModel<CategoryResponseDto>> EditCategory(Guid userId, Guid categoryId, CategoryDto categoryDto);
 
         Task<CategoryResponseModel<bool>> DeleteCategory(Guid UserId, Guid categoryId);
 
